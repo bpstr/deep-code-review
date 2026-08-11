@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AGENTS="$ROOT/skills/deep-review/agents"
 
 required=(
+  optimization-reviewer
   api-contract-reviewer
   database-migration-reviewer
   observability-reviewer
@@ -20,6 +21,8 @@ for agent in "${required[@]}"; do
   }
 done
 
+grep -q 'optimization-reviewer' "$ROOT/SKILL.md"
+grep -q 'optimization-reviewer' "$ROOT/REVIEWER-COVERAGE.md"
 grep -q 'api-contract-reviewer' "$ROOT/SKILL.md"
 grep -q 'database-migration-reviewer' "$ROOT/REVIEWER-COVERAGE.md"
 grep -q 'resource-lifecycle-reviewer' "$ROOT/REVIEWER-COVERAGE.md"
