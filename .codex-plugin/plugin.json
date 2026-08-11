@@ -1,0 +1,6 @@
+{
+  "name": "deep-code-review",
+  "version": "1.0.0",
+  "description": "Multi-agent deep code review for Codex and ChatGPT with specialist reviewers, synthesis, confidence scoring, and P0/P1/P2 triage.",
+  "skills": "./skills/"
+}
