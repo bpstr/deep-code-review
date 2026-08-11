@@ -21,9 +21,9 @@ Report concrete leak, exhaustion, deadlock or shutdown risks. Avoid duplicating 
 ## Output
 
 For each finding include:
-- classification: [NEW] or [PRE-EXISTING]
-- severity: Critical, Important, or Suggestion
-- location/resource
+- Classification: [NEW] or [PRE-EXISTING]
+- Severity: CRITICAL, HIGH, MEDIUM, or LOW
+- Location/resource
 - leak or lifecycle path
 - production consequence
 - deterministic cleanup fix

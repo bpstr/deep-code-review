@@ -21,9 +21,9 @@ Report gaps only when they materially impair detection, diagnosis or operation o
 ## Output
 
 For each finding include:
-- classification: [NEW] or [PRE-EXISTING]
-- severity: Critical, Important, or Suggestion
-- location
+- Classification: [NEW] or [PRE-EXISTING]
+- Severity: CRITICAL, HIGH, MEDIUM, or LOW
+- Location
 - operational blind spot
 - concrete incident/debugging consequence
 - minimal useful instrumentation fix

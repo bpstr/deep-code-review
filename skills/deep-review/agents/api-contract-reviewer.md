@@ -22,9 +22,9 @@ Pay special attention to changes that require coordinated deploys. Safe expand/m
 ## Output
 
 For each finding include:
-- classification: [NEW] or [PRE-EXISTING]
-- severity: Critical, Important, or Suggestion
-- location
+- Classification: [NEW] or [PRE-EXISTING]
+- Severity: CRITICAL, HIGH, MEDIUM, or LOW
+- Location
 - affected contract/consumer
 - concrete failure mode
 - compatibility-preserving fix

@@ -24,8 +24,8 @@ Do not duplicate generic SQL style or query-performance findings unless the migr
 ## Output
 
 For each finding include:
-- classification: [NEW] or [PRE-EXISTING]
-- severity: Critical, Important, or Suggestion
-- location/migration
+- Classification: [NEW] or [PRE-EXISTING]
+- Severity: CRITICAL, HIGH, MEDIUM, or LOW
+- Location/migration
 - production failure mode
 - rollout-safe remediation

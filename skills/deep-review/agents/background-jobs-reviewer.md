@@ -22,9 +22,9 @@ Prioritize concrete corruption, duplication, lost work, retry loops or permanent
 ## Output
 
 For each finding include:
-- classification: [NEW] or [PRE-EXISTING]
-- severity: Critical, Important, or Suggestion
-- location/job or consumer
+- Classification: [NEW] or [PRE-EXISTING]
+- Severity: CRITICAL, HIGH, MEDIUM, or LOW
+- Location/job or consumer
 - delivery/failure scenario
 - consequence
 - robust fix

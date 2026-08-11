@@ -1,11 +1,9 @@
 ---
 name: deep-review
-description: Run a comprehensive multi-agent code review with isolated specialist reviewers, synthesis, confidence scoring, and P0/P1/P2 prioritization. Supports Codex CLI and Claude Code through the same provider-neutral runner.
+description: Run comprehensive multi-agent code reviews with isolated specialists, synthesis, confidence scoring, and P0/P1/P2 prioritization. Use for deep or pre-merge reviews, production-readiness and architecture audits, security, performance or optimization passes, test gaps, and operational failure analysis. Supports Codex CLI and Claude Code through the same provider-neutral runner.
 ---
 
 # Deep Code Review
-
-Use this skill when the user asks for a deep code review, production-readiness audit, architecture review, security review, performance review, optimization pass, test-gap review, or a comprehensive pre-merge assessment.
 
 ## Execution
 

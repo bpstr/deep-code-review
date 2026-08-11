@@ -21,9 +21,9 @@ Report concrete failure amplification or availability risks. Do not recommend re
 ## Output
 
 For each finding include:
-- classification: [NEW] or [PRE-EXISTING]
-- severity: Critical, Important, or Suggestion
-- location/dependency boundary
+- Classification: [NEW] or [PRE-EXISTING]
+- Severity: CRITICAL, HIGH, MEDIUM, or LOW
+- Location/dependency boundary
 - trigger scenario
 - resulting failure amplification
 - practical remediation

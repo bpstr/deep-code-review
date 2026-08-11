@@ -19,12 +19,29 @@ for agent in "${required[@]}"; do
     echo "missing reviewer: $agent" >&2
     exit 1
   }
+  grep -q "$agent" "$ROOT/SKILL.md" || {
+    echo "reviewer missing from root skill documentation: $agent" >&2
+    exit 1
+  }
+  grep -q "$agent" "$ROOT/REVIEWER-COVERAGE.md" || {
+    echo "reviewer missing from coverage audit: $agent" >&2
+    exit 1
+  }
+  grep -q 'Classification' "$AGENTS/$agent.md" || {
+    echo "reviewer missing classification contract: $agent" >&2
+    exit 1
+  }
+  grep -q 'Severity' "$AGENTS/$agent.md" || {
+    echo "reviewer missing severity contract: $agent" >&2
+    exit 1
+  }
+  grep -q 'Location' "$AGENTS/$agent.md" || {
+    echo "reviewer missing location contract: $agent" >&2
+    exit 1
+  }
 done
 
-grep -q 'optimization-reviewer' "$ROOT/SKILL.md"
-grep -q 'optimization-reviewer' "$ROOT/REVIEWER-COVERAGE.md"
-grep -q 'api-contract-reviewer' "$ROOT/SKILL.md"
-grep -q 'database-migration-reviewer' "$ROOT/REVIEWER-COVERAGE.md"
-grep -q 'resource-lifecycle-reviewer' "$ROOT/REVIEWER-COVERAGE.md"
+grep -q 'REVIEWER-COVERAGE.md' "$ROOT/skills/deep-review/SKILL.md"
+grep -q 'matching `agents/<selector>.md` file' "$ROOT/skills/deep-review/SKILL.md"
 
 echo "reviewer coverage smoke test passed"

@@ -55,6 +55,7 @@ Avoid vague advice such as "consider caching" or "use a faster algorithm" withou
 For each finding include:
 
 - **Classification**: `[NEW]` or `[PRE-EXISTING]`
+- **Severity**: `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW`, based on the concrete production or cost risk rather than the size of the possible speedup
 - **Location**: file and line/range when possible
 - **Optimization**: the concrete proposed change
 - **Why it matters**: CPU, latency, memory, I/O, throughput, startup time, or cost impact

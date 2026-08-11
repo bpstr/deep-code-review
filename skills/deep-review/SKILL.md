@@ -48,6 +48,12 @@ Determine the analysis scope from flags or arguments:
 
 Select which aspects to review. Default is `core` (code + errors + arch).
 
+### Experimental reviewer routing
+
+The repository also includes opt-in operational and optimization reviewers that are not yet part of `full`. Read [`../../REVIEWER-COVERAGE.md`](../../REVIEWER-COVERAGE.md) when the user requests optimization, API compatibility, migration safety, observability, resilience, background-job correctness, or resource-lifecycle analysis.
+
+Treat any requested selector with a matching `agents/<selector>.md` file as a direct agent ID and launch that reviewer alongside agents selected through the aspect table. This filesystem-backed rule is the source of truth for direct reviewers, so new opt-in agents do not require a duplicated dispatch-table entry.
+
 | Aspect | Description |
 |--------|-------------|
 | `code` | CLAUDE.md compliance, bugs, code quality |
@@ -311,6 +317,8 @@ After obtaining the list of changed files, determine which platform-specific rev
 ### Phase 2: Determine Which Agents to Launch
 
 Based on selected aspects (including any auto-detected platform aspects from Phase 1.5):
+
+Before applying the mappings below, resolve direct agent IDs: when a requested selector has a matching `agents/<selector>.md` file, launch that agent directly. Report an unknown selector only when neither an aspect mapping nor a matching agent file exists.
 
 | Aspect | Agents to Launch |
 |--------|-----------------|
