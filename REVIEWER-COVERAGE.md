@@ -22,6 +22,29 @@ Adding more language-specific reviewers would currently have lower value than fi
 
 These reviewers are intentionally **not added to `full` yet**. They should first be exercised on real repositories, confidence-scored, and adjusted for overlap/noise. They can already be invoked directly by agent ID because both runners accept an existing agent filename as a selector.
 
+### `optimization-reviewer`
+
+Covers concrete, benchmarkable code optimization opportunities: hot-path simplification, batching, reduced serialization/allocation work, cache placement, I/O reduction, better data structures, less contention, and lower memory/GC pressure.
+
+Why it is distinct: the existing Performance Analyzer is primarily diagnostic — it finds bottlenecks and performance risks. The Optimization Reviewer is prescriptive: it proposes the highest-value concrete changes and requires a way to measure whether each optimization actually helps.
+
+Example:
+
+```bash
+bash scripts/deep-review.sh --changes optimization-reviewer
+```
+
+A strong optimization-focused bundle is:
+
+```bash
+bash scripts/deep-review.sh --changes \
+  perf \
+  optimization-reviewer \
+  simplify \
+  concurrency \
+  sql
+```
+
 ### `api-contract-reviewer`
 
 Covers API and integration compatibility across REST, RPC, webhooks, SDKs, serialized payloads and library-facing contracts.
@@ -99,6 +122,14 @@ bash scripts/deep-review.sh --changes resource-lifecycle-reviewer
 Before promoting these into `full`, test them in focused combinations:
 
 ```bash
+# Optimization pass
+bash scripts/deep-review.sh --changes \
+  perf \
+  optimization-reviewer \
+  simplify \
+  concurrency \
+  sql
+
 # Production backend changes
 bash scripts/deep-review.sh --changes \
   api-contract-reviewer \
@@ -133,6 +164,7 @@ Promote a candidate into a named aspect and potentially `full` when:
 
 Potential future aliases after validation:
 
+- `optimize` → `optimization-reviewer`
 - `api` → `api-contract-reviewer`
 - `migrations` → `database-migration-reviewer`
 - `observability` → `observability-reviewer`
