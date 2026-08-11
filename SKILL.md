@@ -5,7 +5,7 @@ description: Run a comprehensive multi-agent code review with isolated specialis
 
 # Deep Code Review
 
-Use this skill when the user asks for a deep code review, production-readiness audit, architecture review, security review, performance review, test-gap review, or a comprehensive pre-merge assessment.
+Use this skill when the user asks for a deep code review, production-readiness audit, architecture review, security review, performance review, optimization pass, test-gap review, or a comprehensive pre-merge assessment.
 
 ## Execution
 
@@ -43,9 +43,12 @@ bash scripts/deep-review.sh --provider claude full
 
 ## Experimental coverage reviewers
 
-The repository also includes opt-in reviewers for operational gaps that are not yet part of `full`. Invoke them by their agent IDs:
+The repository also includes opt-in reviewers for operational and optimization gaps that are not yet part of `full`. Invoke them by their agent IDs:
 
 ```bash
+# Concrete, benchmarkable speed/memory/I/O optimization opportunities
+bash scripts/deep-review.sh --changes optimization-reviewer
+
 # Public/API compatibility
 bash scripts/deep-review.sh --changes api-contract-reviewer
 
@@ -63,6 +66,17 @@ bash scripts/deep-review.sh --changes background-jobs-reviewer
 
 # Files, sockets, connections, tasks and cleanup lifecycle
 bash scripts/deep-review.sh --changes resource-lifecycle-reviewer
+```
+
+For an aggressive optimization pass:
+
+```bash
+bash scripts/deep-review.sh --changes \
+  perf \
+  optimization-reviewer \
+  simplify \
+  concurrency \
+  sql
 ```
 
 See `REVIEWER-COVERAGE.md` for the coverage audit, overlap analysis, validation bundles and promotion criteria. Keep these reviewers opt-in until they have been calibrated on real repositories and shown to add signal beyond the established agents.
