@@ -1,0 +1,21 @@
+{
+  "name": "deep-code-review",
+  "plugins": [
+    {
+      "name": "deep-code-review",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools",
+      "interface": {
+        "displayName": "Deep Code Review",
+        "description": "Multi-agent code review for Codex and Claude"
+      }
+    }
+  ]
+}
