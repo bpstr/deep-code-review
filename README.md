@@ -12,7 +12,7 @@ A single broad "review this codebase" prompt tends to mix architecture, security
 
 Key capabilities:
 
-- **49 specialized review agents**
+- **60 specialized review agents**
 - **Parallel execution** using independent Codex or Claude CLI processes
 - **File-based data flow** to keep contexts isolated and lightweight
 - **Dedicated synthesis** in a fresh model context

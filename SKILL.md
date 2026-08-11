@@ -1,11 +1,9 @@
 ---
 name: deep-review
-description: Run a comprehensive multi-agent code review with isolated specialist reviewers, synthesis, confidence scoring, and P0/P1/P2 prioritization. Supports Codex CLI and Claude Code through the same provider-neutral runner.
+description: Run comprehensive multi-agent code reviews with isolated specialists, synthesis, confidence scoring, and P0/P1/P2 prioritization. Use for deep or pre-merge reviews, production-readiness and architecture audits, security, performance or optimization passes, test gaps, and operational failure analysis. Supports Codex CLI and Claude Code through the same provider-neutral runner.
 ---
 
 # Deep Code Review
-
-Use this skill when the user asks for a deep code review, production-readiness audit, architecture review, security review, performance review, test-gap review, or a comprehensive pre-merge assessment.
 
 ## Execution
 
@@ -21,7 +19,7 @@ Examples:
 # Core review of current branch vs main/master
 bash scripts/deep-review.sh
 
-# Full cross-cutting review
+# Full established cross-cutting review
 bash scripts/deep-review.sh full
 
 # Uncommitted changes
@@ -40,6 +38,46 @@ The runner auto-detects Codex first, then Claude. Override it with:
 bash scripts/deep-review.sh --provider codex full
 bash scripts/deep-review.sh --provider claude full
 ```
+
+## Experimental coverage reviewers
+
+The repository also includes opt-in reviewers for operational and optimization gaps that are not yet part of `full`. Invoke them by their agent IDs:
+
+```bash
+# Concrete, benchmarkable speed/memory/I/O optimization opportunities
+bash scripts/deep-review.sh --changes optimization-reviewer
+
+# Public/API compatibility
+bash scripts/deep-review.sh --changes api-contract-reviewer
+
+# Zero-downtime schema/data evolution
+bash scripts/deep-review.sh --changes database-migration-reviewer
+
+# Logs, metrics, traces and diagnostic coverage
+bash scripts/deep-review.sh --changes observability-reviewer
+
+# Timeouts, retries, cancellation and dependency failures
+bash scripts/deep-review.sh --changes resilience-reviewer
+
+# Queues, workers, schedulers and event delivery semantics
+bash scripts/deep-review.sh --changes background-jobs-reviewer
+
+# Files, sockets, connections, tasks and cleanup lifecycle
+bash scripts/deep-review.sh --changes resource-lifecycle-reviewer
+```
+
+For an aggressive optimization pass:
+
+```bash
+bash scripts/deep-review.sh --changes \
+  perf \
+  optimization-reviewer \
+  simplify \
+  concurrency \
+  sql
+```
+
+See `REVIEWER-COVERAGE.md` for the coverage audit, overlap analysis, validation bundles and promotion criteria. Keep these reviewers opt-in until they have been calibrated on real repositories and shown to add signal beyond the established agents.
 
 ## Safety
 
