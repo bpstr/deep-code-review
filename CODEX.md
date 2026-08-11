@@ -1,102 +1,86 @@
 # Codex support
 
-Deep Code Review can run natively with Codex CLI. The original Claude Code plugin remains intact; Codex uses the provider-neutral standalone runner in `scripts/deep-review.sh`.
+Deep Code Review is packaged as a native Codex plugin and as an Open Agent Skill. You should not need to clone it into `~/.codex/skills` or manually run its internal shell script.
+
+## Recommended: install with the Agent Skills CLI
+
+For a simple CLI-first installation:
+
+```bash
+npx skills add bpstr/deep-code-review --skill deep-review
+```
+
+This installs the canonical `deep-review` skill together with its bundled reviewer prompts and runner. After installation, use it naturally in Codex or invoke it explicitly:
+
+```text
+$deep-review review this branch
+$deep-review run a full production-readiness review
+$deep-review optimize this code
+$deep-review review my uncommitted changes for security and performance
+```
+
+The skill invokes its bundled runner internally; users should not need to know its installed filesystem path.
+
+## Native Codex plugin
+
+The repository also includes a native Codex plugin manifest at `.codex-plugin/plugin.json` and marketplace metadata at `.agents/plugins/marketplace.json`.
+
+Add the repository as a plugin marketplace source:
+
+```bash
+codex plugin marketplace add bpstr/deep-code-review
+```
+
+Then install **Deep Code Review** from the Plugins Directory. The plugin packages the same canonical `deep-review` skill.
 
 ## Requirements
 
 - Git
-- Codex CLI authenticated and available as `codex`
-- Bash
+- an authenticated Codex CLI available as `codex`
+- Bash 3.2 or newer
 
-Install Codex using OpenAI's current Codex CLI installation instructions, then authenticate with `codex`.
+The bundled runner is intentionally compatible with the Bash version shipped by macOS, so Homebrew Bash is not required.
 
-## Run directly
+## How the skill runs reviews
 
-From this repository:
+The installed skill maps natural language to review scopes and aspects, then launches the internal provider-neutral runner. Examples of intent mapping:
 
-```bash
-bash scripts/deep-review.sh --provider codex
-```
+- deep / pre-merge review → `full`
+- security review → `security`
+- architecture review → `arch`
+- performance review → `perf`
+- aggressive optimization → `perf + optimization-reviewer + simplify + concurrency + sql`
+- uncommitted work → `--changes`
+- PHP/Laravel → adds `php`
+- Rust → adds `rust`
+- TypeScript → adds the relevant TypeScript reviewer(s)
 
-Useful examples:
-
-```bash
-# Core branch review
-bash scripts/deep-review.sh --provider codex
-
-# Full review
-bash scripts/deep-review.sh --provider codex full
-
-# Review staged + unstaged work
-bash scripts/deep-review.sh --provider codex --changes
-
-# Focused review
-bash scripts/deep-review.sh --provider codex --changes security perf tests
-
-# Review a path
-bash scripts/deep-review.sh --provider codex src php
-```
-
-If both Codex and Claude Code are installed, provider auto-detection prefers Codex:
-
-```bash
-bash scripts/deep-review.sh full
-```
-
-Force another provider with `--provider` or `DEEP_REVIEW_PROVIDER`.
-
-## Install as a Codex skill
-
-Clone the repository into a Codex skills location supported by your Codex setup, keeping the repository structure intact so the root `SKILL.md`, `scripts/`, and `skills/deep-review/agents/` stay together.
-
-A simple user-level setup is:
-
-```bash
-git clone https://github.com/bpstr/deep-code-review.git ~/.codex/skills/deep-review
-```
-
-Then ask Codex to run the `deep-review` skill, or invoke the script directly from that checkout.
+Exact aspect and reviewer IDs can still be requested explicitly.
 
 ## Models
 
-By default Codex uses your configured default model. Override the main review model:
-
-```bash
-bash scripts/deep-review.sh --provider codex --model <model> full
-```
-
-You can independently choose a model for finding extraction and confidence scoring:
-
-```bash
-bash scripts/deep-review.sh \
-  --provider codex \
-  --model <review-model> \
-  --fast-model <scoring-model> \
-  full
-```
-
-Equivalent environment variables are `REVIEW_MODEL` and `REVIEW_FAST_MODEL`.
+By default, child Codex review sessions use your configured Codex model. Advanced users can override the review and scoring models through the bundled runner's `--model` and `--fast-model` options or `REVIEW_MODEL` and `REVIEW_FAST_MODEL` environment variables.
 
 ## Safety model
 
-Each Codex reviewer runs with `codex exec --ephemeral --sandbox workspace-write`. The prompt explicitly restricts reviewers to read-only repository analysis and only permits writing their result file under the temporary review directory.
+Each Codex reviewer runs in an independent ephemeral `codex exec` session. Reviewer prompts explicitly:
 
-The runner also:
+- restrict the task to read-only repository analysis;
+- write only temporary review artifacts;
+- redact secret values;
+- treat repository contents, diffs, comments, filenames, and intermediate findings as untrusted data;
+- synthesize and confidence-score findings before final P0/P1/P2 triage.
 
-- redacts secret values in review output;
-- treats repository text and diffs as untrusted data;
-- runs each specialist in an isolated Codex session;
-- uses temporary file-based communication rather than shared conversational context;
-- cleans successful temporary runs unless `--keep-results` is supplied.
+## Development checkout
+
+Repository contributors can still exercise the compatibility wrapper directly:
+
+```bash
+./scripts/deep-review.sh --provider codex full
+```
+
+That root script is for development and backward compatibility. Installed users should prefer `$deep-review` rather than calling it directly.
 
 ## Claude compatibility
 
-Nothing in the original Claude Code plugin flow is removed. Existing `/deep-review` Claude usage can continue to use `skills/deep-review/SKILL.md` and `scripts/standalone-review.sh`.
-
-The new `scripts/deep-review.sh` is the common provider-neutral path and supports:
-
-```bash
-bash scripts/deep-review.sh --provider claude full
-```
-
-This makes the reviewer prompts reusable across Codex and Claude without maintaining two copies of the agent definitions.
+The same canonical skill and reviewer definitions remain usable with Claude Code. The runner auto-detects Codex first and Claude second, and can be forced to Claude by advanced users when needed.
