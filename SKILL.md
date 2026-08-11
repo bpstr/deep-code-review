@@ -21,7 +21,7 @@ Examples:
 # Core review of current branch vs main/master
 bash scripts/deep-review.sh
 
-# Full cross-cutting review
+# Full established cross-cutting review
 bash scripts/deep-review.sh full
 
 # Uncommitted changes
@@ -40,6 +40,32 @@ The runner auto-detects Codex first, then Claude. Override it with:
 bash scripts/deep-review.sh --provider codex full
 bash scripts/deep-review.sh --provider claude full
 ```
+
+## Experimental coverage reviewers
+
+The repository also includes opt-in reviewers for operational gaps that are not yet part of `full`. Invoke them by their agent IDs:
+
+```bash
+# Public/API compatibility
+bash scripts/deep-review.sh --changes api-contract-reviewer
+
+# Zero-downtime schema/data evolution
+bash scripts/deep-review.sh --changes database-migration-reviewer
+
+# Logs, metrics, traces and diagnostic coverage
+bash scripts/deep-review.sh --changes observability-reviewer
+
+# Timeouts, retries, cancellation and dependency failures
+bash scripts/deep-review.sh --changes resilience-reviewer
+
+# Queues, workers, schedulers and event delivery semantics
+bash scripts/deep-review.sh --changes background-jobs-reviewer
+
+# Files, sockets, connections, tasks and cleanup lifecycle
+bash scripts/deep-review.sh --changes resource-lifecycle-reviewer
+```
+
+See `REVIEWER-COVERAGE.md` for the coverage audit, overlap analysis, validation bundles and promotion criteria. Keep these reviewers opt-in until they have been calibrated on real repositories and shown to add signal beyond the established agents.
 
 ## Safety
 
