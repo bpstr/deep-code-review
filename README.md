@@ -116,6 +116,17 @@ Performance findings should follow impact order rather than micro-optimization f
 
 `perf` diagnoses bottlenecks. `optimization-reviewer` proposes benchmarkable changes. Framework/language reviewers should avoid speculative low-level tuning that belongs in those reviewers.
 
+## Reviewer knowledge and calibration
+
+Reviewer guidance is maintained as versioned project knowledge rather than treated as timeless style advice.
+
+- [`REVIEWER-SOURCES.md`](REVIEWER-SOURCES.md) records the primary documentation and selected practitioner material behind reviewer rules.
+- Official language/framework/specification documentation is preferred for factual claims; community guidance is used for useful patterns and failure modes.
+- Reviewers should require a concrete correctness, security, accessibility, compatibility, production, or measurable performance impact before turning a best practice into a finding.
+- `scripts/test-reviewer-knowledge.sh` guards high-value facts and calibration choices that are easy to regress, such as WCAG target-size levels, React Compiler-aware memoization guidance, Vite security rules, modern TypeScript options, Rust 2024 unsafe semantics, Python structured concurrency, Go concurrency tooling, and modern PHP features.
+
+This knowledge should be periodically refreshed as frameworks, compilers, standards, and recommended practices evolve.
+
 ## Experimental production specialists
 
 The project also contains opt-in reviewers for production failure modes:
@@ -156,6 +167,7 @@ Smoke tests:
 ```bash
 bash scripts/test-deep-review.sh
 bash scripts/test-reviewer-coverage.sh
+bash scripts/test-reviewer-knowledge.sh
 bash scripts/test-plugin-packaging.sh
 ```
 
