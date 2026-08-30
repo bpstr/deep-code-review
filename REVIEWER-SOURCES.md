@@ -2,7 +2,7 @@
 
 This file records the primary sources used to calibrate specialist reviewer prompts. Reviewers should prefer official language/framework/standards documentation when a recommendation conflicts with secondary best-practice collections.
 
-The prompts intentionally summarize principles rather than copying source text. Version-specific guidance must always be checked against the repository's declared runtime/toolchain version.
+The prompts intentionally summarize principles rather than copying source text. Version-specific guidance must always be checked against the repository's declared runtime/toolchain version. Stack-aware reviews build one shared `stack-context.md` so specialists reason from the same detected versions and repository shape.
 
 ## React
 
@@ -19,6 +19,28 @@ Additional high-value corpus:
 
 Calibration takeaway: prioritize eliminating async waterfalls and unnecessary bundle work before low-level rerender/JavaScript micro-optimization. React Compiler-aware projects should not receive blanket missing-`useMemo`/`useCallback`/`React.memo` findings.
 
+### React Router
+
+Primary:
+
+- Data loading: https://reactrouter.com/start/framework/data-loading
+- Pending UI: https://reactrouter.com/start/framework/pending-ui
+- Route modules / error boundaries / revalidation: https://reactrouter.com/start/framework/route-module
+- Data Mode loading: https://reactrouter.com/start/data/data-loading
+
+Calibration takeaway: only apply loader/action/pending/revalidation guidance when the project's actual React Router mode supports and uses those APIs. Declarative routing with another intentional data layer is not a defect.
+
+### TanStack Query
+
+Primary:
+
+- Query keys: https://tanstack.com/query/latest/docs/framework/react/guides/query-keys
+- Important defaults: https://tanstack.com/query/latest/docs/framework/react/guides/important-defaults
+- Query invalidation: https://tanstack.com/query/latest/docs/framework/react/guides/query-invalidation
+- Query functions: https://tanstack.com/query/latest/docs/framework/react/guides/query-functions
+
+Calibration takeaway: variables that change query results belong in query identity. Evaluate invalidation/refetch/staleness/retries against the installed version and actual configuration; defaults are context, not automatic defects.
+
 ## Vite
 
 Primary:
@@ -34,6 +56,49 @@ Additional:
 - Vite React Best Practices skill: https://github.com/claudiocebpaz/vite-react-best-practices
 
 Calibration takeaway: inspect plugin hook cost, resolution/module-graph breadth, barrels, pre-bundling, environment exposure, dev-server trust boundaries, production build differences, SPA rewrites/caching, and deployment base paths. Do not recommend tuning knobs without a demonstrated problem.
+
+## Web testing
+
+### Vitest
+
+Primary:
+
+- Vitest guide: https://vitest.dev/guide/
+- Mocking: https://vitest.dev/guide/mocking
+- Timers: https://vitest.dev/guide/mocking/timers
+- Browser Mode: https://vitest.dev/guide/browser/
+
+Calibration takeaway: understand hoisted mocks, lifecycle cleanup, fake timers and execution environment before calling a test deterministic. Browser Mode is appropriate when a real browser behavior matters, not as a universal replacement for fast DOM-shim tests.
+
+### Testing Library
+
+Primary:
+
+- Guiding principles: https://testing-library.com/docs/guiding-principles/
+- Query semantics and priority: https://testing-library.com/docs/queries/about/
+
+Calibration takeaway: tests should resemble user interaction and prefer semantic queries when such a user-facing contract exists. This is not a ban on test IDs or low-level selectors where semantics cannot express the target.
+
+### Playwright
+
+Primary:
+
+- Best practices: https://playwright.dev/docs/best-practices
+- Locators: https://playwright.dev/docs/locators
+- Auto-waiting/actionability: https://playwright.dev/docs/actionability
+- Test isolation: https://playwright.dev/docs/browser-contexts
+
+Calibration takeaway: built-in locators, isolation and web-first synchronization reduce real flakiness. Do not replace intentional timing tests with auto-waiting when elapsed time is itself the contract.
+
+## JavaScript / Node package boundaries
+
+Primary:
+
+- Node.js Packages / `type`, `exports`, `imports`, conditional exports: https://nodejs.org/api/packages.html
+- Node.js ECMAScript modules: https://nodejs.org/api/esm.html
+- npm package.json reference: https://docs.npmjs.com/cli/configuring-npm/package-json
+
+Calibration takeaway: `exports` encapsulates undeclared subpaths and can make an existing package change breaking. Review ESM/CJS, conditions, public subpaths, published files, declarations and peer/singleton dependencies from the consumer's perspective. Do not require package-authoring fields in private applications.
 
 ## TypeScript
 
@@ -103,6 +168,11 @@ A best-practice source is not itself evidence that a finding should be emitted. 
 1. a concrete correctness/security/accessibility failure path;
 2. a credible production/reliability failure mode;
 3. a measurable or strongly evidenced performance cost;
-4. a compatibility violation with the repository's declared runtime/toolchain/API contract.
+4. a compatibility violation with the repository's declared runtime/toolchain/API contract;
+5. a deterministic test false-positive/false-negative or consumer package breakage.
 
 Style-only preferences should be omitted or remain LOW and must survive confidence scoring before final output.
+
+## Behavioral calibration
+
+Prompt-content smoke tests protect important factual rules, but they are not sufficient. `reviewer-fixtures/` contains small positive and negative examples for opt-in model-based calibration. The fixture harness should be used to measure whether specialists actually find required failures and avoid known false positives before promoting more rules/reviewers into automatic coverage.
