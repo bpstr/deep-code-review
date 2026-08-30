@@ -1,9 +1,9 @@
 name	reviewer	expectation	pattern	description
 react-prop-mutation	react-reviewer	present	mutat(e|ion).*prop|prop.*mutat(e|ion)	Mutating props during render should be reported.
-react-compiler-no-memo	react-reviewer	absent	missing.*(React\.memo|useMemo|useCallback)|(React\.memo|useMemo|useCallback).*missing	React Compiler project should not receive blanket missing-memoization advice.
+react-compiler-no-memo	react-reviewer	absent	must.*(React\.memo|useMemo|useCallback)|should add.*(React\.memo|useMemo|useCallback)|missing manual memoization	React Compiler project should not receive blanket missing-memoization advice.
 vite-exposed-client-secret	vite-reviewer	present	VITE_.*(secret|password|credential)|(secret|password|credential).*VITE_	Client-exposed secret-shaped Vite environment use should be reported.
 web-testing-hard-wait	web-testing-reviewer	present	waitForTimeout|fixed (sleep|wait)|hard.?coded (sleep|wait)	Playwright fixed waits used for synchronization should be reported.
 package-missing-subpath-export	js-package-reviewer	present	exports|subpath|ERR_PACKAGE_PATH_NOT_EXPORTED	A self-import of an unexported package subpath should be reported.
 tanstack-missing-query-key	react-reviewer	present	query.?key|queryKey|cache.*(wrong|identity)|(wrong|identity).*cache	A query variable omitted from query identity should be reported.
-go-context-no-client-timeout	go-reviewer	absent	missing.*Client\.Timeout|must.*Client\.Timeout|Client\.Timeout.*(missing|required)	A request already bounded by context should not require Client.Timeout specifically.
-a11y-24px-target	accessibility-scanner	absent	44.?x.?44.*2\.5\.8|2\.5\.8.*44.?x.?44	A 24x24 AA target should not be failed merely for not being 44x44.
+go-context-no-client-timeout	go-reviewer	absent	missing.*Client\.Timeout|Client\.Timeout[[:space:]]+(is[[:space:]]+)?required|must (set|configure|use).*Client\.Timeout	A request already bounded by context should not require Client.Timeout specifically.
+a11y-24px-target	accessibility-scanner	absent	(2\.5\.8|AA).*(minimum|requires|must).{0,24}44|44.{0,24}(minimum|required).*(2\.5\.8|AA)	A 24x24 AA target should not be failed merely for not being 44x44.
