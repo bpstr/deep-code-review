@@ -3,8 +3,12 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AGENTS="$ROOT/skills/deep-review/agents"
+SKILL="$ROOT/skills/deep-review/SKILL.md"
+RUNNER="$ROOT/skills/deep-review/scripts/deep-review.sh"
 
 required=(
+  react-reviewer
+  vite-reviewer
   optimization-reviewer
   api-contract-reviewer
   database-migration-reviewer
@@ -19,12 +23,8 @@ for agent in "${required[@]}"; do
     echo "missing reviewer: $agent" >&2
     exit 1
   }
-  grep -q "$agent" "$ROOT/SKILL.md" || {
-    echo "reviewer missing from root skill documentation: $agent" >&2
-    exit 1
-  }
-  grep -q "$agent" "$ROOT/REVIEWER-COVERAGE.md" || {
-    echo "reviewer missing from coverage audit: $agent" >&2
+  grep -q "$agent" "$SKILL" || {
+    echo "reviewer missing from canonical skill documentation: $agent" >&2
     exit 1
   }
   grep -q 'Classification' "$AGENTS/$agent.md" || {
@@ -41,7 +41,11 @@ for agent in "${required[@]}"; do
   }
 done
 
-grep -q 'REVIEWER-COVERAGE.md' "$ROOT/skills/deep-review/SKILL.md"
-grep -q 'matching `agents/<selector>.md` file' "$ROOT/skills/deep-review/SKILL.md"
+grep -q 'react) echo react-reviewer' "$RUNNER"
+grep -q 'vite) echo vite-reviewer' "$RUNNER"
+grep -q 'detect_specialists' "$RUNNER"
+grep -q 'DEEP_REVIEW_AUTO_SPECIALISTS' "$RUNNER"
+grep -q 'react-reviewer' "$ROOT/README.md"
+grep -q 'vite-reviewer' "$ROOT/README.md"
 
 echo "reviewer coverage smoke test passed"
