@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+AGENTS="$ROOT/skills/deep-review/agents"
+
+# Guard a few high-value factual/calibration statements that are easy to regress.
+grep -q '24 by 24 CSS pixels' "$AGENTS/accessibility-scanner.md"
+grep -q '44 by 44 CSS pixels' "$AGENTS/accessibility-scanner.md"
+grep -q '2.5.7 Dragging Movements' "$AGENTS/accessibility-scanner.md"
+grep -q 'React Compiler' "$AGENTS/react-reviewer.md"
+grep -q 'never flag missing `React.memo`, `useMemo`, or `useCallback` by default' "$AGENTS/react-reviewer.md"
+grep -q 'server.allowedHosts: true' "$AGENTS/vite-reviewer.md"
+grep -q 'barrel' "$AGENTS/vite-reviewer.md"
+grep -q 'exactOptionalPropertyTypes' "$AGENTS/ts-frontend-reviewer.md"
+grep -q 'noUncheckedIndexedAccess' "$AGENTS/ts-frontend-reviewer.md"
+grep -q 'verbatimModuleSyntax' "$AGENTS/ts-frontend-reviewer.md"
+grep -q 'testing/synctest' "$AGENTS/go-reviewer.md"
+grep -q 'unsafe_op_in_unsafe_fn' "$AGENTS/rust-reviewer.md"
+grep -q 'TaskGroup' "$AGENTS/python-reviewer.md"
+grep -q 'property hooks' "$AGENTS/php-reviewer.md"
+grep -q 'asymmetric visibility' "$AGENTS/php-reviewer.md"
+
+test -s "$ROOT/REVIEWER-SOURCES.md"
+grep -q 'Vercel Labs React Best Practices' "$ROOT/REVIEWER-SOURCES.md"
+grep -q 'Vite Performance guide' "$ROOT/REVIEWER-SOURCES.md"
+grep -q 'WCAG 2.2' "$ROOT/REVIEWER-SOURCES.md"
+
+echo "reviewer knowledge calibration smoke test passed"

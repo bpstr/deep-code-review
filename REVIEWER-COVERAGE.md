@@ -1,197 +1,163 @@
 # Reviewer Coverage Audit
 
-This audit reviews the current Deep Code Review specialist set and identifies high-value gaps that are not cleanly covered by the existing language, framework, security, performance, concurrency, SQL, testing, architecture, and infrastructure reviewers.
+Deep Code Review already has broad cross-cutting, language, framework, mobile, infrastructure, and production-readiness coverage. The next quality gains should come primarily from better routing, calibration, and regression testing rather than continuously adding generic reviewers.
 
-## Existing coverage is already strong
+## Current direction
 
-The project already has broad coverage across:
+The canonical runner now distinguishes two modes:
 
-- code quality and silent failure handling
-- architecture, dependency cycles, hotspots, consistency and scale
-- type design, comments, tests, simplification and accessibility
-- localization, concurrency, performance, security and PII
-- agent instructions and repository guidelines/history
-- frontend/backend TypeScript and major web frameworks
-- PHP/Laravel, Rust, Go, Python/Django, Ruby/Rails, Java/Kotlin/Scala, .NET, C/C++ and Elixir
-- iOS, macOS, Android, Flutter and React Native
-- SQL, GraphQL, Docker, Kubernetes, Terraform, Shell and GitHub Actions
+- `core` preserves the historical lightweight reviewer set.
+- `full` preserves the established cross-cutting set and augments it with relevant specialists detected from changed files and manifests.
+- `--no-auto-specialists` or `DEEP_REVIEW_AUTO_SPECIALISTS=0` restores the historical exact `full` set.
+- direct aspect and reviewer IDs remain supported.
 
-Adding more language-specific reviewers would currently have lower value than filling cross-cutting operational gaps.
+This is intentionally conservative: automatic routing should add only reviewers with a clear stack signal, then rely on synthesis/confidence scoring to remove overlap.
 
-## Newly proposed opt-in reviewers
+## New web-specialist boundaries
 
-These reviewers are intentionally **not added to `full` yet**. They should first be exercised on real repositories, confidence-scored, and adjusted for overlap/noise. They can already be invoked directly by agent ID because both runners accept an existing agent filename as a selector.
+### `react-reviewer`
 
-### `optimization-reviewer`
+Owns React-specific correctness and performance concerns:
 
-Covers concrete, benchmarkable code optimization opportunities: hot-path simplification, batching, reduced serialization/allocation work, cache placement, I/O reduction, better data structures, less contention, and lower memory/GC pressure.
+- Rules of React, purity and immutable snapshots
+- hooks/effects and stale synchronization
+- state/component identity and keyed remount behavior
+- async waterfalls and loading boundaries
+- React Compiler-aware memoization guidance
+- Suspense/error-boundary recovery
+- React-specific accessibility/focus mechanisms
 
-Why it is distinct: the existing Performance Analyzer is primarily diagnostic — it finds bottlenecks and performance risks. The Optimization Reviewer is prescriptive: it proposes the highest-value concrete changes and requires a way to measure whether each optimization actually helps.
+It explicitly avoids blanket recommendations for `React.memo`, `useMemo`, or `useCallback`.
 
-Example:
+### `vite-reviewer`
 
-```bash
-bash scripts/deep-review.sh --changes optimization-reviewer
-```
+Owns Vite-specific concerns:
 
-A strong optimization-focused bundle is:
+- `VITE_*`/client environment exposure
+- dev-server trust boundaries such as `allowedHosts`
+- Vite + TypeScript module-resolution alignment
+- plugin-hook startup/transform cost
+- module-graph breadth, barrels and dependency pre-bundling
+- build chunks/assets/base/source maps
+- SPA deep-link rewrites and caching
+- HMR/config stability
 
-```bash
-bash scripts/deep-review.sh --changes \
-  perf \
-  optimization-reviewer \
-  simplify \
-  concurrency \
-  sql
-```
+It should not recommend `optimizeDeps`, warmup, manual chunks, or plugin rewrites without a demonstrated issue.
 
-### `api-contract-reviewer`
+### `ts-frontend-reviewer`
 
-Covers API and integration compatibility across REST, RPC, webhooks, SDKs, serialized payloads and library-facing contracts.
+Now concentrates on frontend TypeScript itself: TSConfig semantics, runtime trust boundaries, async/state contracts, browser APIs and generic routing/loading concerns.
 
-Why it is distinct: the GraphQL reviewer is protocol-specific, while the general code reviewer does not systematically reason about downstream consumers, coordinated deploy requirements, enum/nullability compatibility, pagination stability or version/deprecation behavior.
+### `accessibility-scanner`
 
-Example:
+Remains the authority for WCAG/assistive-technology behavior. Framework reviewers should avoid duplicating generic WCAG findings.
 
-```bash
-bash scripts/deep-review.sh --changes api-contract-reviewer
-```
+## Automatic detection targets
 
-### `database-migration-reviewer`
+The full-review detector can currently augment with:
 
-Covers production-safe schema/data evolution: expand/migrate/contract sequencing, locking, backfills, rolling-deploy compatibility, restartability and destructive changes.
+- React, Vite, Next.js, Vue, Angular, Svelte, React Native
+- frontend or backend TypeScript based on changed files/manifests
+- Go
+- Rust
+- Python and Django
+- PHP
 
-Why it is distinct: the SQL reviewer covers query/schema quality broadly, but migration correctness is a deployment-time discipline with failure modes that only appear while old and new application versions coexist.
+Detection should stay shallow, portable, and Bash 3.2 compatible. It is not intended to replace explicit user-selected aspects for complex monorepos.
 
-Example:
+## Modernization priorities applied
 
-```bash
-bash scripts/deep-review.sh --changes database-migration-reviewer
-```
+### TypeScript
 
-### `observability-reviewer`
+Review compiler/runtime reality rather than source syntax alone. Important optional checks include `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`, and a `moduleResolution` mode consistent with the actual runtime/bundler.
 
-Covers logs, metrics, traces, correlation, health signals, telemetry cardinality and whether changed behavior can actually be diagnosed in production.
+### React
 
-Why it is distinct: performance/security reviewers may notice individual logging issues, but neither evaluates whether the system exposes enough reliable telemetry to detect and reconstruct failures.
+Prioritize correctness, waterfalls and bundle/loading cost before memoization. React Compiler diagnostics and current `eslint-plugin-react-hooks` rules are relevant when the project uses them.
 
-Example:
+### Vite
 
-```bash
-bash scripts/deep-review.sh --changes observability-reviewer
-```
+Use official Vite performance guidance: inspect plugin hook cost, resolution operations, barrels/module breadth, dependency pre-bundling and measured profiling before proposing tuning.
 
-### `resilience-reviewer`
+### Accessibility
 
-Covers network/process-boundary failure handling: timeouts, retry safety, exponential backoff/jitter, cancellation, partial failures, duplicate side effects and graceful degradation.
+Correct WCAG 2.2 target-size guidance:
 
-Why it is distinct: concurrency focuses on simultaneous execution correctness; resilience focuses on dependency failure and failure amplification across boundaries.
+- 2.5.8 Target Size (Minimum), AA: 24×24 CSS px or applicable exception.
+- 2.5.5 Target Size (Enhanced), AAA: 44×44 CSS px.
 
-Example:
+Also cover 2.4.11 Focus Not Obscured, 2.5.7 Dragging Movements, 3.2.6 Consistent Help, 3.3.7 Redundant Entry, and 3.3.8 Accessible Authentication where triggered.
 
-```bash
-bash scripts/deep-review.sh --changes resilience-reviewer
-```
+### Go
 
-### `background-jobs-reviewer`
+Prefer effective lifetime/cancellation/resource reasoning over one mandated mechanism. Recognize modern Go analysis tooling and deterministic concurrency testing where supported.
 
-Covers queues, workers, schedulers and event consumers: at-least-once delivery, idempotency, acknowledgement timing, dead letters, ordering, checkpointing, retry loops and cron overlap.
+### Rust
 
-Why it is distinct: these systems have delivery semantics and duplicate/lost-work failure modes that are not reliably caught by generic concurrency or resilience analysis.
+Cover Rust 2024 unsafe changes and explicitly avoid speculative `#[inline]`, hasher, `Cow`, and generics-vs-dynamic-dispatch optimization findings without evidence.
 
-Example:
+### Python
 
-```bash
-bash scripts/deep-review.sh --changes background-jobs-reviewer
-```
+Treat cancellation as control flow and understand `TaskGroup` structured concurrency. Distinguish abstract library dependencies from pinned/reproducible application environments.
 
-### `resource-lifecycle-reviewer`
+### PHP
 
-Covers ownership and deterministic cleanup of sockets, files, streams, DB connections, transactions, locks, tasks, timers, subscriptions and child processes.
+Stay version-aware through PHP 8.4/8.5, including property hooks and asymmetric visibility where they strengthen contracts. Distinguish generic PHP from Laravel/Symfony conventions and application vs reusable-package Composer policy.
 
-Why it is distinct: performance can identify high resource use and concurrency can identify races/deadlocks, but resource lifetime bugs often require explicit acquire/use/release-path analysis across exceptions, cancellation and shutdown.
+## Reviewer quality policy
 
-Example:
+A reviewer should emit a finding only when it can explain at least one of:
 
-```bash
-bash scripts/deep-review.sh --changes resource-lifecycle-reviewer
-```
+1. a concrete correctness/security/accessibility failure;
+2. a credible production/reliability failure mode;
+3. a measurable or strongly evidenced performance cost;
+4. a compatibility violation with declared runtime/toolchain/API constraints.
 
-## Suggested validation bundles
+A pattern appearing in a best-practice guide is not sufficient by itself.
 
-Before promoting these into `full`, test them in focused combinations:
+## Regression scenarios
 
-```bash
-# Optimization pass
-bash scripts/deep-review.sh --changes \
-  perf \
-  optimization-reviewer \
-  simplify \
-  concurrency \
-  sql
+High-value golden scenarios for future LLM-evaluated fixtures:
 
-# Production backend changes
-bash scripts/deep-review.sh --changes \
-  api-contract-reviewer \
-  database-migration-reviewer \
-  observability-reviewer \
-  resilience-reviewer
+| Scenario | Expected behavior |
+| --- | --- |
+| React Compiler project without manual memoization | no missing-memoization finding |
+| React component mutates props during render | React correctness finding |
+| independent sequential awaits on a critical path | waterfall finding |
+| Vite `VITE_DATABASE_PASSWORD` consumed by client | client-secret finding |
+| Vite `server.allowedHosts: true` | dev-server security finding |
+| Vite project with healthy automatic dependency discovery | no missing `optimizeDeps` finding |
+| 24×24 WCAG AA pointer target | no 2.5.8 size failure solely for not being 44×44 |
+| drag-only reorder control with no single-pointer alternative | 2.5.7 finding |
+| Go HTTP request bounded by propagated context but no `Client.Timeout` | no blanket timeout finding |
+| Rust standard HashMap on non-hot code | no hasher optimization finding |
+| Python reusable library with compatible version ranges | no exact-pin requirement |
+| PHP reusable library without application lockfile policy | no universal lockfile finding |
 
-# Worker / queue changes
-bash scripts/deep-review.sh --changes \
-  background-jobs-reviewer \
-  resilience-reviewer \
-  resource-lifecycle-reviewer \
-  concurrency
+These should eventually become executable LLM evaluation fixtures. The lightweight repository tests currently verify reviewer presence, routing contracts, and key factual calibration statements.
 
-# Deployment-sensitive application change
-bash scripts/deep-review.sh --changes \
-  database-migration-reviewer \
-  api-contract-reviewer \
-  security \
-  tests
-```
+## Experimental production reviewers
+
+These remain opt-in until they repeatedly find unique issues at an acceptable noise/token cost:
+
+- `optimization-reviewer`
+- `api-contract-reviewer`
+- `database-migration-reviewer`
+- `observability-reviewer`
+- `resilience-reviewer`
+- `background-jobs-reviewer`
+- `resource-lifecycle-reviewer`
+
+Potential future areas still worth validating include cache correctness, multi-tenancy isolation, feature-flag lifecycle, time/date correctness, financial/numerical correctness, search/index consistency, data retention, and CLI contracts.
 
 ## Promotion criteria
 
-Promote a candidate into a named aspect and potentially `full` when:
+Promote or auto-route a reviewer more aggressively when:
 
-1. it repeatedly finds issues missed by existing reviewers;
-2. its findings survive confidence scoring at a useful rate;
-3. overlap with existing agents is low enough to avoid synthesis noise;
-4. prompts work across multiple languages/frameworks;
-5. runtime/token cost is justified by the severity of issues found.
+1. it finds issues missed by existing reviewers;
+2. findings survive confidence scoring at a useful rate;
+3. overlap/noise is controlled;
+4. it works across representative repositories;
+5. runtime/token cost is justified by issue severity.
 
-Potential future aliases after validation:
-
-- `optimize` → `optimization-reviewer`
-- `api` → `api-contract-reviewer`
-- `migrations` → `database-migration-reviewer`
-- `observability` → `observability-reviewer`
-- `resilience` → `resilience-reviewer`
-- `jobs` → `background-jobs-reviewer`
-- `resources` → `resource-lifecycle-reviewer`
-- `production` → observability + resilience + migrations + API contracts + resource lifecycle
-
-## Other uncovered areas worth considering later
-
-These look useful, but are lower-confidence candidates because they overlap more heavily with existing reviewers or are domain-specific:
-
-- **cache correctness** — stale reads, invalidation, stampedes, key-space collisions, tenant isolation
-- **multi-tenancy isolation** — tenant scoping across DB queries, caches, jobs, storage and authorization
-- **CLI ergonomics** — exit codes, stdout/stderr contracts, non-interactive behavior, shell composition
-- **feature-flag lifecycle** — stale flags, unsafe default states, inconsistent evaluation and cleanup
-- **data retention/compliance** — deletion propagation, retention windows, legal holds, auditability
-- **time/date correctness** — timezones, DST, clock assumptions, expiry and scheduling boundaries
-- **numerical/financial correctness** — precision, rounding, units, overflow and currency handling
-- **search/index consistency** — source-of-truth vs search-index drift, reindex safety and eventual consistency
-
-These should become reviewers only after there are representative repositories/tests to calibrate them against.
-
-## References behind the gap selection
-
-- Martin Fowler's Parallel Change / expand-contract guidance illustrates why compatibility and migration sequencing need explicit review: https://martinfowler.com/bliki/ParallelChange.html
-- Evolutionary Database Design discusses backward-compatible database evolution during continuous delivery: https://martinfowler.com/articles/evodb.html
-- OpenTelemetry defines observability around correlated traces, metrics and logs: https://opentelemetry.io/docs/concepts/observability-primer/
-- AWS Builders' Library documents timeouts, retries, backoff and jitter as core distributed-system reliability concerns: https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/
-- Google Cloud job guidance explicitly recommends idempotent job design for retry/restart safety: https://cloud.google.com/run/docs/jobs-retries
+See [`REVIEWER-SOURCES.md`](REVIEWER-SOURCES.md) for the knowledge sources behind the current calibration.
