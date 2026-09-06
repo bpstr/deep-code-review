@@ -32,7 +32,7 @@ grep -q 'mental-mutant check' "$AGENTS/test-analyzer.md"
 grep -q 'Artificial-only' "$AGENTS/test-analyzer.md"
 grep -q 'default/zero/empty/false' "$AGENTS/test-analyzer.md"
 grep -q 'do not flag loops or parameterization by syntax alone' "$AGENTS/test-analyzer.md"
-grep -q 'test is actually run' "$AGENTS/test-analyzer.md"
+grep -q 'not to be discovered or run in the relevant pipeline' "$AGENTS/test-analyzer.md"
 grep -q 'A test-smell label is not evidence' "$AGENTS/test-analyzer.md"
 
 test -s "$ROOT/REVIEWER-SOURCES.md"
