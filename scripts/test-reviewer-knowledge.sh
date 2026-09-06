@@ -27,6 +27,14 @@ grep -q 'TaskGroup' "$AGENTS/python-reviewer.md"
 grep -q 'property hooks' "$AGENTS/php-reviewer.md"
 grep -q 'asymmetric visibility' "$AGENTS/php-reviewer.md"
 
+# Test-review calibration: protect the semantic rules and their false-positive guards.
+grep -q 'mental-mutant check' "$AGENTS/test-analyzer.md"
+grep -q 'Artificial-only' "$AGENTS/test-analyzer.md"
+grep -q 'default/zero/empty/false' "$AGENTS/test-analyzer.md"
+grep -q 'do not flag loops or parameterization by syntax alone' "$AGENTS/test-analyzer.md"
+grep -q 'test is actually run' "$AGENTS/test-analyzer.md"
+grep -q 'A test-smell label is not evidence' "$AGENTS/test-analyzer.md"
+
 test -s "$ROOT/REVIEWER-SOURCES.md"
 grep -q 'Vercel Labs React Best Practices' "$ROOT/REVIEWER-SOURCES.md"
 grep -q 'React Router' "$ROOT/REVIEWER-SOURCES.md"
@@ -36,5 +44,10 @@ grep -q 'Testing Library' "$ROOT/REVIEWER-SOURCES.md"
 grep -q 'Node.js Packages' "$ROOT/REVIEWER-SOURCES.md"
 grep -q 'Vite Performance guide' "$ROOT/REVIEWER-SOURCES.md"
 grep -q 'WCAG 2.2' "$ROOT/REVIEWER-SOURCES.md"
+
+test -s "$ROOT/TEST-REVIEW-RESEARCH.md"
+grep -q 'Fault sensitivity matters more than execution coverage' "$ROOT/TEST-REVIEW-RESEARCH.md"
+grep -q 'Realism is a contract question' "$ROOT/TEST-REVIEW-RESEARCH.md"
+grep -q 'Automated "test smell" labels need strong calibration' "$ROOT/TEST-REVIEW-RESEARCH.md"
 
 echo "reviewer knowledge calibration smoke test passed"
