@@ -19,8 +19,10 @@ $deep-review review this branch
 $deep-review run a full review
 $deep-review review my uncommitted changes
 $deep-review optimize this code
+$deep-review review whether these tests can actually catch regressions
+$deep-review find false-green tests and unrealistic mocks
+$deep-review review our Playwright/Vitest tests for flakiness and test quality
 $deep-review review this React + Vite change
-$deep-review review our Playwright/Vitest tests for flakiness
 $deep-review review this package's exports and ESM/CJS compatibility
 ```
 
@@ -33,6 +35,7 @@ A single broad review prompt mixes architecture, correctness, security, tests, p
 Key capabilities:
 
 - **60+ specialized review agents**
+- deep test-quality analysis for false greens, unrealistic scenarios, weak oracles, brittle mocks, nondeterminism, and missing behavioral coverage
 - independent parallel Codex or Claude sessions
 - one shared stack/version profile for version-sensitive reviews
 - fresh-context synthesis
@@ -96,8 +99,8 @@ DEEP_REVIEW_AUTO_SPECIALISTS=0 ./scripts/deep-review.sh full
 | `arch` | Dependencies, cycles, hotspots, consistency, scale |
 | `types` | Type invariants and encapsulation |
 | `comments` | Comment accuracy and rot |
-| `tests` | General test coverage quality and critical gaps |
-| `web-testing` | Vitest/Jest isolation, Testing Library, Playwright, async/flakiness |
+| `tests` | Test trustworthiness: false greens, realistic contracts, oracle strength, doubles/fidelity, determinism, execution, behavioral coverage and layer choice |
+| `web-testing` | Vitest/Jest isolation, Testing Library, Playwright, async/flakiness and browser-test mechanics |
 | `js-package` | Node package boundaries, ESM/CJS, exports, peers, publishing/workspaces |
 | `simplify` | Clarity and unnecessary complexity |
 | `a11y` | Accessibility / WCAG 2.2 |
@@ -107,6 +110,33 @@ DEEP_REVIEW_AUTO_SPECIALISTS=0 ./scripts/deep-review.sh full
 | `security` | Injection, auth, access control, crypto, supply chain |
 | `pii` | PII leakage and unsafe data handling |
 | `review` | Repository guidelines, history, prior feedback |
+
+## Test trustworthiness reviews
+
+Deep Code Review treats tests as software that can itself be wrong. The `tests` reviewer does not chase a coverage percentage or mechanically label "test smells". It asks whether the suite provides trustworthy evidence that production behavior is correct.
+
+Core questions include:
+
+- **Would a plausible broken implementation make the test fail?** Weak assertions, default-value traps, implementation-derived expected values and unobserved side effects can create false greens even with high coverage.
+- **Can the scenario actually exist?** The reviewer distinguishes production-reachable states, public-boundary/adversarial inputs, deliberate defensive tests, and artificial states that exist only because a mock bypasses the real contract.
+- **Do doubles preserve the semantics being claimed?** Mocks and fakes are checked against real validation, serialization, database, transaction, auth, retry, ordering and protocol behavior when those semantics matter.
+- **Is the test deterministic and actually executed?** Order dependence, shared state, time, timezone, randomness, parallel collisions, retries, leaked async work, skip/focus markers and CI/test-discovery configuration are part of correctness.
+- **Is the test coupled to behavior or implementation choreography?** Private-state assertions, broad interaction verification and incidental snapshots are only findings when they cause a concrete false-green/false-red or maintenance failure mode.
+- **Is important changed behavior tested at the right layer?** The reviewer recommends the cheapest layer that can actually observe the regression instead of demanding E2E coverage indiscriminately.
+
+The reviewer includes stack-aware calibration for PHPUnit, pytest, Go `testing`, JUnit and .NET. Detailed Vitest/Jest mocking, Testing Library semantics and Playwright synchronization remain owned by `web-testing-reviewer`.
+
+```bash
+# General test trustworthiness review
+./scripts/deep-review.sh --changes tests
+
+# General + browser-framework test review
+./scripts/deep-review.sh --changes tests web-testing
+```
+
+A deliberate calibration rule is: **a smell name is not evidence**. A loop, fixture, mock, snapshot, helper, parameterized test or multiple assertions should only become a finding when the reviewer can explain a concrete way the test can lie, flake, block valid refactoring or miss a regression.
+
+See [`TEST-REVIEW-RESEARCH.md`](TEST-REVIEW-RESEARCH.md) for the research basis, evidence and false-positive guards behind this review model.
 
 ## Web specialists
 
@@ -120,7 +150,7 @@ Deep Code Review has intentionally separate web layers:
 - **JavaScript packages (`js-package`)** — Node `type`/`exports`/`imports`, conditional exports, types/runtime parity, peer dependencies, `sideEffects`, published files and workspace boundaries.
 - **Accessibility (`a11y`)** — semantic HTML, keyboard/focus, dynamic content, WCAG 2.2 and assistive-technology impact.
 
-A React + Vite application may legitimately run `ts-frontend`, `react`, `vite`, `web-testing`, `js-package`, and `a11y` when the corresponding code/config is in scope because they own different failure domains.
+A React + Vite application may legitimately run `ts-frontend`, `react`, `vite`, `web-testing`, `js-package`, and `a11y` when the corresponding code/config is in scope because they own different failure domains. For a comprehensive browser-test audit, run both `tests` and `web-testing`: the former evaluates whether the test can lie or proves an artificial contract, while the latter owns browser/test-framework mechanics.
 
 ## Dependency-aware React review
 
@@ -154,6 +184,7 @@ Performance findings should follow impact order rather than micro-optimization f
 Reviewer guidance is maintained as versioned project knowledge rather than treated as timeless style advice.
 
 - [`REVIEWER-SOURCES.md`](REVIEWER-SOURCES.md) records the primary documentation and selected practitioner material behind reviewer rules.
+- [`TEST-REVIEW-RESEARCH.md`](TEST-REVIEW-RESEARCH.md) records the evidence and design rationale for test trustworthiness review, including false-green detection, scenario reachability, doubles/fidelity, determinism, test-smell calibration and mutation-testing evidence.
 - Official language/framework/specification documentation is preferred for factual claims; community guidance is used for useful patterns and failure modes.
 - Reviewers should require a concrete correctness, security, accessibility, compatibility, production, deterministic-test, consumer-package, or measurable performance impact before turning a best practice into a finding.
 - `scripts/test-reviewer-knowledge.sh` guards high-value facts and calibration choices that are easy to regress.
@@ -176,7 +207,7 @@ DEEP_REVIEW_RUN_LLM_FIXTURES=1 \
 
 Optional environment controls include `DEEP_REVIEW_FIXTURE_PROVIDER`, `DEEP_REVIEW_FIXTURE_MODEL`, and `DEEP_REVIEW_FIXTURE_FAST_MODEL`.
 
-Positive fixtures assert that a specialist surfaces a known failure class; negative fixtures guard against known false positives such as blanket React memoization, mandatory Go `Client.Timeout`, or misclassifying the WCAG 2.5.8 24px minimum as 44px.
+Positive fixtures assert that a specialist surfaces a known failure class; negative fixtures guard against known false positives. Test-review calibration specifically includes a default-value false green and an impossible mock contract as positive cases, while protecting malformed public-boundary input tests and clear Go table-driven tests from syntax-only warnings.
 
 ## Experimental production specialists
 
