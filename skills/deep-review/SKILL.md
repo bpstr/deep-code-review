@@ -1,6 +1,6 @@
 ---
 name: deep-review
-description: Run comprehensive multi-agent code reviews with isolated specialists, shared stack/version context, automatic stack-aware routing, synthesis, confidence scoring, and P0/P1/P2 prioritization. Use for deep or pre-merge reviews, production-readiness and architecture audits, security, performance or optimization passes, test gaps, packaging boundaries, and operational failure analysis. Supports Codex CLI and Claude Code.
+description: Run comprehensive multi-agent code reviews with isolated specialists, shared stack/version context, automatic stack-aware routing, synthesis, confidence scoring, and P0/P1/P2 prioritization. Use for deep or pre-merge reviews, production-readiness and architecture audits, security, performance or optimization passes, test quality/realism/gaps, packaging boundaries, and operational failure analysis. Supports Codex CLI and Claude Code.
 argument-hint: "[aspects] [--pr|--branch|--changes|path]"
 ---
 
@@ -31,7 +31,9 @@ Translate natural-language requests into the narrowest useful review set:
 - performance review → `perf`
 - aggressive optimization → `perf optimization-reviewer simplify concurrency sql`
 - accessibility → `a11y`
+- test quality / test realism / false-green tests / unrealistic mocks / missing regression coverage → `tests`
 - browser/web test reliability → `web-testing`
+- comprehensive web test review → `tests web-testing`
 - JS package/publishing/workspace boundaries → `js-package`
 - PHP/Laravel → add `php`
 - Rust → add `rust`
@@ -70,13 +72,16 @@ Existing aspect names and direct reviewer IDs remain valid. `smart` is an explic
 
 Use overlapping specialists deliberately, not redundantly:
 
+- `test-analyzer` owns stack-agnostic test trustworthiness: oracle strength, scenario reachability, test-data discrimination, doubles/fidelity, change-detector tests, abstraction, isolation, discovery/execution, behavioral coverage/layering, plus language-aware PHPUnit/pytest/Go/JUnit/.NET calibration.
 - `ts-frontend-reviewer` owns browser/frontend TypeScript, state boundaries, TSConfig integration, and generic framework concerns.
 - `react-reviewer` owns React purity, hooks/effects, component identity, React Compiler-aware performance, Suspense, and dependency-aware React Router/TanStack Query correctness.
 - `vite-reviewer` owns Vite env/security, dev server, module resolution, plugin cost, dependency pre-bundling, build assets, and SPA deployment.
-- `web-testing-reviewer` owns Vitest/Jest isolation, Testing Library semantics, Playwright synchronization/locators, and web-test determinism.
+- `web-testing-reviewer` owns Vitest/Jest isolation, Testing Library semantics, Playwright synchronization/locators, and detailed web-test determinism/environment behavior.
 - `js-package-reviewer` owns Node module/package boundaries, exports/imports, ESM/CJS, declarations/runtime parity, peer/singleton dependencies, publishing, and workspaces.
 - `accessibility-scanner` owns WCAG and assistive-technology impact; framework reviewers should only surface framework-specific mechanisms that cause those defects.
 - language reviewers should avoid speculative micro-optimization when `optimization-reviewer` or `perf` is a better fit.
+
+For browser-heavy test reviews, `tests web-testing` is intentionally complementary: the general analyzer asks whether the test can lie or proves an artificial contract; the web reviewer owns browser/test-framework mechanics.
 
 ## Experimental reviewers
 
@@ -96,10 +101,16 @@ These remain opt-in until calibrated:
 # Stack-aware full branch review
 bash "$SKILL_DIR/scripts/deep-review.sh" full
 
+# General test trustworthiness: false greens, unrealistic scenarios, coverage gaps
+bash "$SKILL_DIR/scripts/deep-review.sh" --changes tests
+
+# Comprehensive web test review
+bash "$SKILL_DIR/scripts/deep-review.sh" --changes tests web-testing
+
 # Uncommitted React + Vite review
 bash "$SKILL_DIR/scripts/deep-review.sh" --changes vite react ts-frontend a11y
 
-# Web testing reliability
+# Web testing reliability only
 bash "$SKILL_DIR/scripts/deep-review.sh" --changes web-testing
 
 # Reusable JS package/public API review
@@ -115,6 +126,8 @@ bash "$SKILL_DIR/scripts/deep-review.sh" --changes perf optimization-reviewer si
 ## Calibration
 
 Lightweight smoke tests validate routing and factual prompt knowledge. `reviewer-fixtures/` additionally provides opt-in model-based positive/negative fixtures so reviewer behavior—not only prompt text—can be calibrated. Do not make expensive LLM fixture runs a mandatory install/runtime dependency.
+
+The general test reviewer is deliberately calibrated against syntax-only "test smell" rules. Its positive/negative fixtures include default-value false greens and impossible mock contracts, while guarding legitimate malformed-boundary tests and clear table-driven loops. See the repository's `TEST-REVIEW-RESEARCH.md` for the evidence and design rationale.
 
 ## Safety
 
