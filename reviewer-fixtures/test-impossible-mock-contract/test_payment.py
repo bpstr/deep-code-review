@@ -4,7 +4,7 @@ from unittest.mock import Mock
 from payment import Checkout
 
 
-def test_unknown_gateway_status_retries():
+def test_unknown_gateway_status_is_declined():
     gateway = Mock()
     # The real Gateway contract returns PaymentResult with a PaymentStatus enum.
     # This mock invents a third state that the real implementation cannot return.
@@ -12,4 +12,4 @@ def test_unknown_gateway_status_retries():
 
     checkout = Checkout(gateway)
 
-    assert checkout.submit(1000) == "retry"
+    assert checkout.submit(1000) == "declined"
