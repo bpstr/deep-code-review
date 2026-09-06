@@ -23,9 +23,4 @@ class Checkout:
 
     def submit(self, amount: int) -> str:
         result = self.gateway.charge(amount)
-        if result.status == PaymentStatus.SUCCEEDED:
-            return "paid"
-        if result.status == PaymentStatus.DECLINED:
-            return "declined"
-        # Defensive fallback, but the real Gateway contract cannot produce this.
-        return "retry"
+        return "paid" if result.status == PaymentStatus.SUCCEEDED else "declined"
