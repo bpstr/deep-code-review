@@ -1,0 +1,5 @@
+{
+  "name": "vitest5-clearmocks-fixture",
+  "private": true,
+  "devDependencies": { "vitest": "^5.0.0" }
+}

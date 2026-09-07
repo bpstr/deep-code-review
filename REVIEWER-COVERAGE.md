@@ -15,15 +15,18 @@ Automatic routing stays conservative: add only reviewers with a clear stack sign
 
 ## Shared stack/version context
 
-Version-sensitive reviewers should not independently guess framework/runtime versions. Stack-specific/full reviews now perform one fast profiling pass that records:
+Version-sensitive reviewers should not independently guess framework/runtime versions. Stack-specific/full reviews perform one fast profiling pass that records:
 
 - application/library/service/CLI/monorepo shape;
 - relevant workspace/package roots;
 - declared or resolved language/framework versions where evidence exists;
 - package manager, lockfiles, ESM/CJS and package-boundary signals;
+- server-TypeScript execution mode, including native Node stripping versus `tsc`/`tsx`/loaders/bundlers;
 - React Compiler, React Router, TanStack Query and rendering-mode signals;
-- Vitest/Jest/Testing Library/Playwright environment;
-- TypeScript module/config constraints;
+- Vite major and Vite 8 Rolldown-era configuration signals;
+- Vitest/Jest major plus Testing Library/Playwright environment and mock-lifecycle configuration;
+- TypeScript major/module/config constraints;
+- explicit Python free-threaded support when repository evidence exists;
 - explicit version-sensitive review constraints.
 
 All specialists read the same `stack-context.md`. If profiling fails, they fall back to repository inspection and the final report records the gap. This profile is deliberately skipped for historical `core` and exact compatibility `full` reviews.
@@ -32,65 +35,35 @@ All specialists read the same `stack-context.md`. If profiling fails, they fall 
 
 ### `react-reviewer`
 
-Owns React-specific correctness and performance concerns:
-
-- Rules of React, purity and immutable snapshots;
-- hooks/effects and stale synchronization;
-- state/component identity and keyed remount behavior;
-- async waterfalls and loading boundaries;
-- React Compiler-aware memoization guidance;
-- Suspense/error-boundary recovery;
-- React-specific accessibility/focus mechanisms;
-- dependency-aware React Router and TanStack Query correctness.
+Owns React-specific correctness and performance concerns: Rules of React, purity, hooks/effects, state identity, async waterfalls, React Compiler-aware memoization, Suspense/recovery, React-specific accessibility mechanisms, and dependency-aware React Router/TanStack Query correctness.
 
 It explicitly avoids blanket recommendations for `React.memo`, `useMemo`, or `useCallback`, does not force React Router Data/Framework Mode, and treats TanStack Query defaults as context rather than defects.
 
 ### `vite-reviewer`
 
-Owns Vite-specific concerns:
+Owns Vite-specific concerns: client environment exposure, dev-server trust boundaries, Vite/TypeScript module alignment, plugin cost, module-graph breadth, dependency optimization, build chunks/assets/base/source maps, SPA deployment and HMR.
 
-- `VITE_*`/client environment exposure;
-- dev-server trust boundaries such as `allowedHosts`;
-- Vite + TypeScript module-resolution alignment;
-- plugin-hook startup/transform cost;
-- module-graph breadth, barrels and dependency pre-bundling;
-- build chunks/assets/base/source maps;
-- SPA deep-link rewrites and caching;
-- HMR/config stability.
-
-It should not recommend `optimizeDeps`, warmup, manual chunks, or plugin rewrites without a demonstrated issue.
+For Vite 8+, it also understands the Rolldown migration: production builds and dependency optimization no longer run on the historical Rollup/esbuild split. Deprecated `build.rollupOptions` and `optimizeDeps.esbuildOptions` compatibility aliases are not automatically failures; reviewers look for actual translation/semantic breakage. Vite 8.1 bundled dev mode remains experimental and is never a blanket recommendation.
 
 ### `web-testing-reviewer`
 
-Owns web-test reliability and behavioral confidence:
+Owns web-test reliability and behavioral confidence: Vitest/Jest mock/timer lifecycle, test isolation, Testing Library semantics, Playwright locators/auto-waiting, DOM-shim vs browser mismatches, and async/flakiness mechanics.
 
-- Vitest/Jest mock and fake-timer lifecycle;
-- test isolation and parallel-order safety;
-- Testing Library semantic queries and async query semantics;
-- Playwright locators, auto-waiting, isolation, event ordering and fixed-wait flakiness;
-- DOM-shim vs real-browser environment mismatches;
-- weak/implementation-detail assertions and boundary-coverage gaps.
-
-It is auto-routed only when supported web testing dependencies are detected.
+Version calibration now includes Vitest 4's changed restore semantics and Vitest 5's default `clearMocks: true`, preventing stale advice that demands explicit clearing when the installed runner already provides it.
 
 ### `js-package-reviewer`
 
-Owns JavaScript package-consumer boundaries:
+Owns JavaScript package-consumer boundaries: Node `type`, ESM/CJS/extensions, `exports`/`imports`/conditions, declaration/runtime parity, peer/singleton dependencies, `sideEffects`, published artifacts, workspace dependencies and semver compatibility.
 
-- Node `type`, ESM/CJS and extensions;
-- `exports`, `imports`, conditions and public subpaths;
-- runtime/declaration parity;
-- peer/singleton dependency correctness;
-- `sideEffects` and required initialization;
-- published files/build artifacts;
-- monorepo hidden/undeclared dependencies;
-- semver/consumer compatibility.
-
-It is relevant to JavaScript/TypeScript package manifests but should distinguish private applications from publishable/reused packages.
+Modern Node native TypeScript support does not weaken those boundaries: Node intentionally does not strip TypeScript in `node_modules`, so source-TypeScript publishing still requires an explicit consumer/runtime contract.
 
 ### `ts-frontend-reviewer`
 
-Concentrates on frontend TypeScript itself: TSConfig semantics, runtime trust boundaries, async/state contracts, browser APIs and generic routing/loading concerns.
+Owns frontend TypeScript compiler/runtime alignment, boundary validation, state/async contracts and browser APIs. For TypeScript 6.0+, it accounts for changed defaults and removed/deprecated legacy options instead of applying TS 5 assumptions.
+
+### `ts-backend-reviewer`
+
+Owns Node/server TypeScript runtime boundaries, event-loop and process lifecycle, plus execution-mode correctness. It now distinguishes native Node TypeScript stripping from full transformer/compiler paths: native Node does not type-check or honor `tsconfig` path transforms.
 
 ### `accessibility-scanner`
 
@@ -98,57 +71,51 @@ Remains the authority for WCAG/assistive-technology behavior. Framework/testing 
 
 ## Automatic detection targets
 
-A stack-aware full review can currently augment with:
+A stack-aware full review can currently augment with React, Vite, Next.js, Vue, Angular, Svelte, React Native, frontend/backend TypeScript, web testing, JavaScript package boundaries, Go, Rust, Python/Django, and PHP.
 
-- React, Vite, Next.js, Vue, Angular, Svelte, React Native;
-- frontend or backend TypeScript based on changed files/manifests;
-- web testing when Vitest/Jest/Testing Library/Playwright is present;
-- JavaScript package-boundary review when a relevant `package.json` is present;
-- Go;
-- Rust;
-- Python and Django;
-- PHP.
-
-Manifest lookup walks from changed files toward the repository root so monorepo package signals are less dependent on the root `package.json`. Detection remains shallow and Bash 3.2 compatible; the LLM stack profiler is responsible for richer version/tooling interpretation, not reviewer selection.
+Manifest lookup walks from changed files toward the repository root so monorepo package signals are less dependent on the root `package.json`. Detection remains shallow and Bash 3.2 compatible; the LLM stack profiler is responsible for richer version/tooling interpretation, not reviewer selection. No selector or routing expansion was required for the September 2026 knowledge refresh.
 
 ## Modernization priorities applied
 
 ### TypeScript
 
-Review compiler/runtime reality rather than source syntax alone. Important optional checks include `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`, and a `moduleResolution` mode consistent with the actual runtime/bundler.
+Review compiler/runtime reality rather than source syntax alone. Important optional checks include `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noUncheckedSideEffectImports`, `verbatimModuleSyntax`, and a `moduleResolution` mode consistent with the actual runtime/bundler. TypeScript 6.0 changed defaults and removed/deprecated legacy options; those checks are strictly version-gated.
 
 ### React
 
-Prioritize correctness, waterfalls and bundle/loading cost before memoization. React Compiler diagnostics and current `eslint-plugin-react-hooks` rules are relevant when the project uses them. React Router loaders/actions/pending/error boundaries and TanStack Query keys/invalidation/defaults are conditional dependency knowledge, not mandatory architecture.
+Prioritize correctness, waterfalls and bundle/loading cost before memoization. React Compiler diagnostics and current `eslint-plugin-react-hooks` rules are relevant when the project uses them. React Router loaders/actions/pending/error boundaries and TanStack Query keys/invalidation/defaults remain conditional dependency knowledge, not mandatory architecture. No new React reviewer rules were justified in this refresh.
 
 ### Vite
 
-Use official Vite performance guidance: inspect plugin hook cost, resolution operations, barrels/module breadth, dependency pre-bundling and measured profiling before proposing tuning.
+For Vite 8, reason about Rolldown rather than old Rollup/esbuild implementation assumptions. Compatibility aliases are calibrated as migrations rather than failures unless they break behavior. Continue to inspect plugin hook cost, resolution operations, barrels/module breadth, dependency optimization and measured profiling before proposing tuning.
+
+### Web testing
+
+Vitest mock lifecycle is version-sensitive. Vitest 5 defaults `clearMocks` on; Vitest 4 changed `vi.restoreAllMocks` behavior. Testing Library and Playwright guidance remains user-facing/semantic and synchronization-focused rather than selector-style dogma.
+
+### Node / packages
+
+Native Node TypeScript stripping is now stable in modern Node lines, but it ignores `tsconfig` transformations and performs no typechecking. Runtime reviewers identify this execution mode before interpreting aliases/imports; package reviewers continue to enforce real consumer packaging boundaries because Node does not strip TypeScript in `node_modules`.
 
 ### Accessibility
 
-Correct WCAG 2.2 target-size guidance:
-
-- 2.5.8 Target Size (Minimum), AA: 24×24 CSS px or applicable exception.
-- 2.5.5 Target Size (Enhanced), AAA: 44×44 CSS px.
-
-Also cover 2.4.11 Focus Not Obscured, 2.5.7 Dragging Movements, 3.2.6 Consistent Help, 3.3.7 Redundant Entry, and 3.3.8 Accessible Authentication where triggered.
+WCAG 2.2 calibration remains correct: 2.5.8 Target Size (Minimum), AA is 24×24 CSS px subject to exceptions; 44×44 is 2.5.5 Enhanced (AAA). Existing Focus Not Obscured, Dragging Movements, Consistent Help, Redundant Entry and Accessible Authentication coverage remains current.
 
 ### Go
 
-Prefer effective lifetime/cancellation/resource reasoning over one mandated mechanism. Recognize modern Go analysis tooling and deterministic concurrency testing where supported.
+Go 1.27 adds generic methods and `testing/synctest.Sleep`. Reviewers must check `go.mod`/toolchain version before rejecting new syntax or recommending newer APIs. Effective cancellation/resource reasoning remains preferable to mandating one timeout mechanism.
 
 ### Rust
 
-Cover Rust 2024 unsafe changes and explicitly avoid speculative `#[inline]`, hasher, `Cow`, and generics-vs-dynamic-dispatch optimization findings without evidence.
+Rust 1.98 is current during this refresh; the existing Rust 2024 unsafe/soundness coverage remains valid. Continue to review against MSRV/edition and avoid speculative `#[inline]`, hasher, `Cow`, or generics-vs-dynamic-dispatch performance findings without evidence.
 
 ### Python
 
-Treat cancellation as control flow and understand `TaskGroup` structured concurrency. Distinguish abstract library dependencies from pinned/reproducible application environments.
+Python 3.14 officially supports free-threaded CPython. The Python reviewer only activates no-GIL-specific thread/extension checks when the repository explicitly supports/tests that runtime mode; `requires-python >=3.14` alone is not evidence. Existing cancellation/TaskGroup and package-policy calibration remains valid.
 
 ### PHP
 
-Stay version-aware through PHP 8.4/8.5, including property hooks and asymmetric visibility where they strengthen contracts. Distinguish generic PHP from Laravel/Symfony conventions and application vs reusable-package Composer policy.
+PHP 8.4/8.5 guidance remains current for stable production lines. PHP 8.6 is still a pre-release testing line in the September 2026 refresh, so preview-only behavior must not be applied unless a project explicitly targets it.
 
 ## Reviewer quality policy
 
@@ -164,20 +131,9 @@ A pattern appearing in a best-practice guide is not sufficient by itself.
 
 ## Executable behavioral fixtures
 
-`reviewer-fixtures/` now turns selected positive and negative scenarios into an opt-in model-based evaluation harness. Static validation always checks fixture metadata/directories/reviewer IDs; model execution only runs when `DEEP_REVIEW_RUN_LLM_FIXTURES=1` is explicitly enabled.
+`reviewer-fixtures/` turns selected positive and negative scenarios into an opt-in model-based evaluation harness. Static validation always checks fixture metadata/directories/reviewer IDs; model execution only runs when `DEEP_REVIEW_RUN_LLM_FIXTURES=1` is explicitly enabled.
 
-Initial calibration includes:
-
-| Scenario | Expected behavior |
-| --- | --- |
-| React component mutates props during render | React correctness finding |
-| React Compiler project without manual memoization | no blanket missing-memoization finding |
-| Vite client reads a secret-shaped `VITE_*` variable | client-secret finding |
-| Playwright uses `waitForTimeout` as synchronization | web-test flakiness finding |
-| package self-imports a subpath excluded by `exports` | package-boundary finding |
-| TanStack Query query function depends on an ID absent from `queryKey` | wrong-cache/query-identity finding |
-| Go HTTP request bounded by propagated context but no `Client.Timeout` | no blanket Client.Timeout finding |
-| 24×24 accessible pointer target | no WCAG 2.5.8 finding merely for not being 44×44 |
+Calibration includes React prop mutation and Compiler memoization, Vite client secrets, Playwright fixed waits, package subpath exports, TanStack Query identity, Go context timeout calibration, WCAG target sizing, test false-green/reachability cases, native Node TypeScript ignoring `tsconfig` paths, and Vitest 5's default mock-history clearing.
 
 These behavioral fixtures complement—not replace—the cheap prompt/routing/factual smoke tests. They are expected to have some model variance, so they should inform calibration trends rather than become a mandatory install gate.
 
@@ -197,13 +153,6 @@ Potential future areas still worth validating include cache correctness, multi-t
 
 ## Promotion criteria
 
-Promote or auto-route a reviewer more aggressively when:
-
-1. it finds issues missed by existing reviewers;
-2. findings survive confidence scoring at a useful rate;
-3. positive/negative fixtures show useful discrimination;
-4. overlap/noise is controlled;
-5. it works across representative repositories;
-6. runtime/token cost is justified by issue severity.
+Promote or auto-route a reviewer more aggressively when it finds issues missed by existing reviewers, findings survive confidence scoring, positive/negative fixtures show useful discrimination, overlap/noise is controlled, representative repositories validate it, and runtime/token cost is justified by issue severity.
 
 See [`REVIEWER-SOURCES.md`](REVIEWER-SOURCES.md) for the knowledge sources behind the current calibration.

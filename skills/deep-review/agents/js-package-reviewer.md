@@ -24,6 +24,8 @@ Check `package.json`, extensions, compiler output, and target runtime together:
 - Node-specific modules accidentally exposed to browser conditions or vice versa;
 - top-level await or other module semantics incompatible with a `require` condition.
 
+For modern Node runtimes that support native TypeScript stripping, do not assume that makes source-TypeScript publishing universally safe. Node intentionally does not strip TypeScript under `node_modules`, ignores consumer `tsconfig` transforms such as `paths`, and native execution is distinct from a package's build/transpile contract.
+
 ### 2. `exports`, `imports`, and public subpaths
 
 Treat package maps as compatibility contracts:
@@ -73,6 +75,7 @@ Do not flag barrels merely for existing. Show bundle/module-graph or side-effect
 For publishable packages:
 - `files`, `.npmignore`, build scripts, or package-manager configuration omitting declarations, CSS, WASM, worker files, assets, package metadata, or entry targets;
 - exports referencing `dist` files that the publish step does not generate;
+- source-only TypeScript shipped as the runtime entry when consumers are expected to execute it from `node_modules` without a documented compatible loader/build contract;
 - source-only files shipped when the package promises compiled output, or compiled output omitted;
 - secrets, fixtures, credentials, huge generated artifacts, or internal workspace files unintentionally included in the package;
 - prepublish/prepare lifecycle assumptions that fail for the actual registry/install workflow.
@@ -103,7 +106,8 @@ Do not report:
 - CJS or ESM merely because you prefer the other;
 - peer dependencies without a concrete shared-host/singleton contract;
 - `sideEffects` tuning without evidence of real initialization or bundle behavior;
-- workspace layout preferences without an import/build/publish failure mode.
+- workspace layout preferences without an import/build/publish failure mode;
+- source TypeScript merely because it exists—only flag a consumer/runtime boundary that cannot execute the published form.
 
 Read the shared stack context, package manager/lockfile, actual consumer packages, build config, `tsconfig`, and package publishing intent before concluding a manifest is wrong.
 
@@ -111,7 +115,7 @@ Read the shared stack context, package manager/lockfile, actual consumer package
 
 - **CRITICAL**: package update causes widespread runtime failure/security exposure or publishes secrets.
 - **HIGH**: exported entry cannot load, types/runtime disagree in a way that breaks consumers, required dependency missing from published package, duplicate singleton framework causes runtime correctness failure.
-- **MEDIUM**: semver-breaking subpath change, hidden workspace dependency, broken conditional branch, required asset/declaration omitted, tree-shaking removes required side effects.
+- **MEDIUM**: semver-breaking subpath change, hidden workspace dependency, broken conditional branch, required asset/declaration omitted, source-TypeScript consumer incompatibility, tree-shaking removes required side effects.
 - **LOW**: smaller compatibility/packaging hardening with demonstrated value.
 
 ## Output format
@@ -130,6 +134,6 @@ Group [NEW] findings first, then [PRE-EXISTING], ordered by severity.
 
 ## Knowledge basis
 
-Use Node's package/module documentation and the installed package manager/toolchain as the primary authority for runtime resolution. Account for TypeScript and bundler behavior, but do not assume bundler success proves Node/package-consumer compatibility.
+Use Node's package/module and TypeScript-execution documentation plus the installed package manager/toolchain as the primary authority for runtime resolution. Account for TypeScript and bundler behavior, but do not assume bundler success—or Node's native source TypeScript support—proves package-consumer compatibility.
 
 Remember: package bugs often survive every application test because the repository's own workspace can resolve files and dependencies that real consumers cannot. Review from the consumer's point of view.
