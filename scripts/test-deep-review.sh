@@ -4,6 +4,8 @@ set -euo pipefail
 bash -n scripts/deep-review.sh
 bash -n skills/deep-review/scripts/deep-review.sh
 bash -n skills/deep-review/scripts/deep-review-engine.sh
+bash -n skills/deep-review/scripts/deep-review-provider-shim.sh
+bash -n skills/deep-review/scripts/deep-review-mktemp-shim.sh
 
 output="$(bash skills/deep-review/scripts/deep-review.sh --help)"
 grep -q -- '--provider codex|claude|auto' <<<"$output"

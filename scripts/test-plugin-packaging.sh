@@ -8,6 +8,8 @@ test -s "$ROOT/.agents/plugins/marketplace.json"
 test -s "$ROOT/skills/deep-review/SKILL.md"
 test -s "$ROOT/skills/deep-review/scripts/deep-review.sh"
 test -s "$ROOT/skills/deep-review/scripts/deep-review-engine.sh"
+test -s "$ROOT/skills/deep-review/scripts/deep-review-provider-shim.sh"
+test -s "$ROOT/skills/deep-review/scripts/deep-review-mktemp-shim.sh"
 test -d "$ROOT/skills/deep-review/agents"
 
 grep -q '"skills": "./skills/"' "$ROOT/.codex-plugin/plugin.json"

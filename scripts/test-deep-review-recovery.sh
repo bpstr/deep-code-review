@@ -24,7 +24,7 @@ cat >"$TMP/bin/codex" <<'EOF_CODEX'
 set -u
 prompt=""
 for arg in "$@"; do prompt="$arg"; done
-run_dir="${DEEP_REVIEW_ACTIVE_RUN_DIR:?}"
+work_dir="${DEEP_REVIEW_ACTIVE_WORK_DIR:?}"
 
 if printf '%s' "$prompt" | grep -q 'specialized READ-ONLY code analysis agent'; then
   target="$(printf '%s\n' "$prompt" | sed -n 's/^Write your complete Markdown findings to: //p' | head -1)"
@@ -38,14 +38,14 @@ if printf '%s' "$prompt" | grep -q 'specialized READ-ONLY code analysis agent'; 
   printf '# Findings\n\nNo findings.\n' >"$target"
 elif printf '%s' "$prompt" | grep -q 'synthesis agent for a multi-agent code review'; then
   echo synth >>"${FAKE_CALL_LOG:?}"
-  printf '# Report\n' >"$run_dir/REPORT.md"
+  printf '# Report\n' >"$work_dir/REPORT.md"
 elif printf '%s' "$prompt" | grep -q 'extract every distinct code-review finding'; then
   echo extract >>"${FAKE_CALL_LOG:?}"
-  mkdir -p "$run_dir/findings"
-  echo 0 >"$run_dir/findings/count.txt"
+  mkdir -p "$work_dir/findings"
+  echo 0 >"$work_dir/findings/count.txt"
 elif printf '%s' "$prompt" | grep -q 'final code-review triage editor'; then
   echo final >>"${FAKE_CALL_LOG:?}"
-  printf '# Final\n\nNo findings.\n' >"$run_dir/FINAL.md"
+  printf '# Final\n\nNo findings.\n' >"$work_dir/FINAL.md"
 else
   echo unknown >>"${FAKE_CALL_LOG:?}"
 fi
@@ -62,7 +62,8 @@ wait_for_file() {
   [ -e "$file" ]
 }
 
-# Interruption recovery: completed reviewer output must not be recomputed.
+# Interruption recovery: completed reviewer output must be checkpointed outside the
+# provider's temporary sandbox and must not be recomputed.
 STATE="$TMP/state-recovery"
 CALLS="$TMP/calls-recovery"
 BLOCK="$TMP/block-recovery"
@@ -82,8 +83,12 @@ set -e
 blocked_pid="$(cat "$BLOCK.pid")"
 sleep 0.2
 ! kill -0 "$blocked_pid" 2>/dev/null
+run="$(find "$STATE" -type d -name 'run-*' | head -1)"
+grep -q '^interrupted$' "$run/status"
+[ -s "$run/checkpoints/data/code-reviewer.md" ]
+grep -q '/deep-review-work\.' "$CALLS"
+! grep -q "$STATE.*code-reviewer.md" "$CALLS"
 
-grep -q '^interrupted$' "$(find "$STATE" -name status | head -1)"
 PATH="$TMP/bin:$PATH" FAKE_CALL_LOG="$CALLS" DEEP_REVIEW_PROVIDER=codex DEEP_REVIEW_STATE_DIR="$STATE" \
   bash "$RUNNER" --max-concurrent 1 target.txt code errors >"$TMP/second.out" 2>"$TMP/second.err"
 grep -q 'Resuming interrupted review run:' "$TMP/second.err"
@@ -93,7 +98,8 @@ latest="$(PATH="$TMP/bin:$PATH" DEEP_REVIEW_STATE_DIR="$STATE" bash "$RUNNER" --
 [ -s "$latest/FINAL.md" ]
 grep -q '^completed$' "$latest/status"
 
-# Simultaneous identical runs must not share a live recovery directory.
+# Simultaneous identical runs must get distinct live run directories. Give this test
+# enough global slots so it tests isolation rather than the aggregate memory gate below.
 STATE_SIM="$TMP/state-simultaneous"
 CALLS_SIM="$TMP/calls-simultaneous"
 BLOCK_A="$TMP/block-a"
@@ -101,12 +107,14 @@ BLOCK_B="$TMP/block-b"
 : >"$CALLS_SIM"
 PATH="$TMP/bin:$PATH" FAKE_CALL_LOG="$CALLS_SIM" FAKE_BLOCK_ALL=1 FAKE_BLOCK_MARKER="$BLOCK_A" \
   DEEP_REVIEW_PROVIDER=codex DEEP_REVIEW_STATE_DIR="$STATE_SIM" \
-  bash "$RUNNER" --max-concurrent 1 target.txt code >"$TMP/a.out" 2>"$TMP/a.err" &
+  DEEP_REVIEW_MEMORY_RESERVE_MB=0 DEEP_REVIEW_MEMORY_PER_WORKER_MB=1 \
+  bash "$RUNNER" --max-concurrent 2 target.txt code >"$TMP/a.out" 2>"$TMP/a.err" &
 pid_a=$!
 wait_for_file "$BLOCK_A"
 PATH="$TMP/bin:$PATH" FAKE_CALL_LOG="$CALLS_SIM" FAKE_BLOCK_ALL=1 FAKE_BLOCK_MARKER="$BLOCK_B" \
   DEEP_REVIEW_PROVIDER=codex DEEP_REVIEW_STATE_DIR="$STATE_SIM" \
-  bash "$RUNNER" --max-concurrent 1 target.txt code >"$TMP/b.out" 2>"$TMP/b.err" &
+  DEEP_REVIEW_MEMORY_RESERVE_MB=0 DEEP_REVIEW_MEMORY_PER_WORKER_MB=1 \
+  bash "$RUNNER" --max-concurrent 2 target.txt code >"$TMP/b.out" 2>"$TMP/b.err" &
 pid_b=$!
 wait_for_file "$BLOCK_B"
 [ "$(find "$STATE_SIM" -type d -name 'run-*' | wc -l | tr -d ' ')" -eq 2 ]
@@ -116,7 +124,37 @@ wait "$pid_a"
 wait "$pid_b"
 set -e
 
-# Memory pressure must reduce concurrency rather than honoring a dangerous fan-out.
+# Aggregate memory protection: two independent review runs share machine-level provider
+# slots, so individually safe runs cannot multiply into an OOM-sized combined fan-out.
+STATE_GLOBAL="$TMP/state-global"
+CALLS_GLOBAL="$TMP/calls-global"
+BLOCK_GA="$TMP/block-global-a"
+BLOCK_GB="$TMP/block-global-b"
+: >"$CALLS_GLOBAL"
+PATH="$TMP/bin:$PATH" FAKE_CALL_LOG="$CALLS_GLOBAL" FAKE_BLOCK_ALL=1 FAKE_BLOCK_MARKER="$BLOCK_GA" \
+  DEEP_REVIEW_PROVIDER=codex DEEP_REVIEW_STATE_DIR="$STATE_GLOBAL" \
+  DEEP_REVIEW_MEMORY_RESERVE_MB=999999999 \
+  bash "$RUNNER" --max-concurrent 8 target.txt code >"$TMP/ga.out" 2>"$TMP/ga.err" &
+pid_ga=$!
+wait_for_file "$BLOCK_GA"
+PATH="$TMP/bin:$PATH" FAKE_CALL_LOG="$CALLS_GLOBAL" FAKE_BLOCK_ALL=1 FAKE_BLOCK_MARKER="$BLOCK_GB" \
+  DEEP_REVIEW_PROVIDER=codex DEEP_REVIEW_STATE_DIR="$STATE_GLOBAL" \
+  DEEP_REVIEW_MEMORY_RESERVE_MB=999999999 \
+  bash "$RUNNER" --max-concurrent 8 target.txt code >"$TMP/gb.out" 2>"$TMP/gb.err" &
+pid_gb=$!
+sleep 1
+[ ! -e "$BLOCK_GB" ]
+kill -TERM "$pid_ga"
+set +e
+wait "$pid_ga"
+set -e
+wait_for_file "$BLOCK_GB"
+kill -TERM "$pid_gb"
+set +e
+wait "$pid_gb"
+set -e
+
+# Memory pressure must also reduce per-run concurrency and record the decision.
 STATE_MEM="$TMP/state-memory"
 CALLS_MEM="$TMP/calls-memory"
 : >"$CALLS_MEM"
@@ -126,6 +164,7 @@ PATH="$TMP/bin:$PATH" FAKE_CALL_LOG="$CALLS_MEM" DEEP_REVIEW_PROVIDER=codex DEEP
 grep -q 'Memory guard: limiting concurrency from 8 to 1' "$TMP/memory.err"
 plan="$(find "$STATE_MEM" -name resource-plan.txt | head -1)"
 grep -q '^safe_concurrency=1$' "$plan"
+grep -q '^global_provider_slots=1$' "$plan"
 
 # Saved-run discovery should work without a provider invocation.
 PATH="$TMP/bin:$PATH" DEEP_REVIEW_STATE_DIR="$STATE_MEM" bash "$RUNNER" --list-runs | grep -q 'completed'
