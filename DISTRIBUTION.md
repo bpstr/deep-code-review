@@ -9,3 +9,5 @@ Supported distribution methods:
 - Open Agent Skills CLI via `npx skills add bpstr/deep-code-review --skill deep-review`
 
 The skill directory must stay self-contained: its runner lives at `skills/deep-review/scripts/deep-review.sh` and reviewer prompts live under `skills/deep-review/agents/`.
+
+The runner persists recoverable checkpoints and completed artifacts outside the reviewed repository by default. See [`RECOVERY.md`](RECOVERY.md) for the state layout, simultaneous-run behavior, memory controls, and retention notes.
