@@ -3,6 +3,7 @@
   "plugins": [
     {
       "name": "deep-code-review",
+      "version": "1.1.0",
       "source": {
         "source": "local",
         "path": "./"
