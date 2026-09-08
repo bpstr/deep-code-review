@@ -137,18 +137,26 @@ if [ "$status" -eq 0 ] && [ -n "$target" ] && [ -s "$target" ]; then
       done
       [ "$complete" -eq 1 ] || exit "$status"
       mkdir -p "$run_dir/checkpoints/data/findings"
+      checkpoint_ok=1
       n=1
       while [ "$n" -le "$count" ]; do
         finding="$work_dir/findings/finding-$n.md"
         tmp="$run_dir/checkpoints/data/findings/finding-$n.md.tmp.$$"
-        cp "$finding" "$tmp" && mv "$tmp" "$run_dir/checkpoints/data/findings/finding-$n.md"
+        if ! cp "$finding" "$tmp" || ! mv "$tmp" "$run_dir/checkpoints/data/findings/finding-$n.md"; then
+          rm -f "$tmp"
+          checkpoint_ok=0
+        fi
         n=$((n + 1))
       done
+      [ "$checkpoint_ok" -eq 1 ] || exit 1
     fi
   fi
   mkdir -p "$(dirname "$checkpoint")" "$(dirname "$marker")"
   checkpoint_tmp="$checkpoint.tmp.$$"
-  cp "$target" "$checkpoint_tmp" && mv "$checkpoint_tmp" "$checkpoint"
+  if ! cp "$target" "$checkpoint_tmp" || ! mv "$checkpoint_tmp" "$checkpoint"; then
+    rm -f "$checkpoint_tmp"
+    exit 1
+  fi
   marker_tmp="$marker.tmp.$$"
   printf 'complete\n' >"$marker_tmp"
   mv "$marker_tmp" "$marker"
