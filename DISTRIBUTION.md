@@ -8,4 +8,14 @@ Supported distribution methods:
 - repo marketplace via `.agents/plugins/marketplace.json`
 - Open Agent Skills CLI via `npx skills add bpstr/deep-code-review --skill deep-review`
 
-The skill directory must stay self-contained: its runner lives at `skills/deep-review/scripts/deep-review.sh` and reviewer prompts live under `skills/deep-review/agents/`.
+The skill directory must stay self-contained. `skills/deep-review/scripts/deep-review.sh` is the public durable runner; `deep-review-engine.sh` preserves the provider-neutral review engine, and the two small shim scripts provide sandbox-safe checkpointing/resource coordination. Reviewer prompts remain under `skills/deep-review/agents/`.
+
+## Version 1.1.0
+
+The Codex/agent plugin version is `1.1.0`. Existing installs can update through their normal plugin update flow after refreshing the `bpstr/deep-code-review` marketplace source. The Claude-compatible manifest is bumped to `5.9.0` to preserve its existing version line.
+
+Version 1.1.0 adds resumable review checkpoints, saved artifacts, simultaneous-run isolation, and adaptive memory protection. Provider processes continue writing only to a temporary sandbox-writable work directory; the outer runner atomically checkpoints completed stages into private persistent state and restores those checkpoints after a crash, shutdown, OOM kill, or other interruption. Simultaneous runs also share a machine-level provider-slot budget so multiple individually safe reviews cannot collectively overcommit memory.
+
+Accessibility review remains part of `full` and is available directly as `a11y`.
+
+Persistent run data defaults to `${XDG_STATE_HOME:-~/.local/state}/deep-code-review` and is created with private permissions. Use `--list-runs` or `--latest-artifacts` to locate saved reports, or `--artifacts-dir DIR` / `DEEP_REVIEW_STATE_DIR` to choose another location.
