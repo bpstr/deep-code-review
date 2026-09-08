@@ -13,9 +13,9 @@ test -s "$ROOT/skills/deep-review/scripts/deep-review-mktemp-shim.sh"
 test -d "$ROOT/skills/deep-review/agents"
 
 grep -q '"skills": "./skills/"' "$ROOT/.codex-plugin/plugin.json"
-grep -q '"version": "1.1.1"' "$ROOT/.codex-plugin/plugin.json"
+grep -q '"version": "1.2.0"' "$ROOT/.codex-plugin/plugin.json"
 grep -q 'name: deep-review' "$ROOT/skills/deep-review/SKILL.md"
-grep -q 'RUNNER_VERSION="1.1.1"' "$ROOT/skills/deep-review/scripts/deep-review.sh"
+grep -q 'RUNNER_VERSION="1.2.0"' "$ROOT/skills/deep-review/scripts/deep-review.sh"
 grep -q 'SKILL_DIR=' "$ROOT/skills/deep-review/scripts/deep-review-engine.sh"
 
 echo "plugin packaging smoke test passed"
