@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1 — 2026-09-08
+
+- Publish run ownership atomically so a shutdown cannot strand an ownerless lock that blocks future recovery.
+- Invalidate synthesis, extraction, confidence, and final checkpoints when an upstream stack/reviewer stage has to rerun, preventing stale reports after a transient reviewer failure recovers.
+- Remove stale unmarked stage outputs before rerunning them so a provider failure cannot be mistaken for success because an old checkpoint file was restored.
+- Include untracked path contents in the durable-run fingerprint, preventing stale path-review recovery after an untracked file changes.
+- Make the recovery/resource regression harness part of the standard runner smoke gate and extend it for dependency invalidation and atomic lock ownership.
+
 ## 1.1.0 — 2026-09-08
 
 - Persist completed review stages outside reboot-sensitive temporary storage while keeping provider writes inside sandbox-writable temporary directories.

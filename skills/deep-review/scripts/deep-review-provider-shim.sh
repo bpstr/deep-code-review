@@ -22,21 +22,25 @@ fi
 run_dir="${DEEP_REVIEW_PERSISTENT_RUN_DIR:?}"
 work_dir="${DEEP_REVIEW_ACTIVE_WORK_DIR:?}"
 target=""
+stage=""
 case "$prompt" in
   *"specialized READ-ONLY code analysis agent"*)
+    stage=reviewer
     target="$(printf '%s\n' "$prompt" | sed -n 's/^Write your complete Markdown findings to: //p' | head -1)"
     ;;
-  *"stack profiling instructions"*) target="$work_dir/stack-context.md" ;;
-  *"synthesis agent for a multi-agent code review"*) target="$work_dir/REPORT.md" ;;
-  *"extract every distinct code-review finding"*) target="$work_dir/findings/count.txt" ;;
+  *"stack profiling instructions"*) stage=stack; target="$work_dir/stack-context.md" ;;
+  *"synthesis agent for a multi-agent code review"*) stage=synthesis; target="$work_dir/REPORT.md" ;;
+  *"extract every distinct code-review finding"*) stage=extract; target="$work_dir/findings/count.txt" ;;
   *"independent code-review confidence scorer"*)
+    stage=score
     target="$(printf '%s\n' "$prompt" | sed -n 's/^Write exactly two lines to \(.*\):$/\1/p' | head -1)"
     ;;
-  *"final code-review triage editor"*) target="$work_dir/FINAL.md" ;;
+  *"final code-review triage editor"*) stage=final; target="$work_dir/FINAL.md" ;;
 esac
 
 checkpoint=""
 marker=""
+rel=""
 if [ -n "$target" ]; then
   rel="${target#"$work_dir"/}"
   checkpoint="$run_dir/checkpoints/data/$rel"
@@ -48,7 +52,63 @@ if [ -n "$target" ] && [ -s "$checkpoint" ] && [ -f "$marker" ]; then
   printf 'Recovered completed stage: %s\n' "$rel" >&2
   exit 0
 fi
-[ -z "$marker" ] || rm -f "$marker"
+
+invalidate_file() {
+  stale_rel="$1"
+  rm -f "$run_dir/checkpoints/data/$stale_rel" \
+        "$run_dir/checkpoints/complete/$stale_rel" \
+        "$work_dir/$stale_rel" 2>/dev/null || true
+}
+invalidate_tree() {
+  stale_rel="$1"
+  rm -rf "$run_dir/checkpoints/data/$stale_rel" \
+         "$run_dir/checkpoints/complete/$stale_rel" \
+         "$work_dir/$stale_rel" 2>/dev/null || true
+}
+invalidate_downstream() {
+  case "$stage" in
+    stack)
+      # A newly generated stack profile can change every specialist conclusion. Remove
+      # all recovered provider outputs while keeping engine-owned scope and shim files.
+      data_root="$run_dir/checkpoints/data"
+      if [ -d "$data_root" ]; then
+        find "$data_root" -type f -print 2>/dev/null | while IFS= read -r old; do
+          old_rel="${old#"$data_root"/}"
+          rm -f "$work_dir/$old_rel" 2>/dev/null || true
+        done
+      fi
+      rm -rf "$run_dir/checkpoints/data" "$run_dir/checkpoints/complete"
+      mkdir -p "$run_dir/checkpoints/data" "$run_dir/checkpoints/complete"
+      ;;
+    reviewer)
+      # A reviewer that was missing or incomplete may now contribute new findings.
+      invalidate_file REPORT.md
+      invalidate_tree findings
+      invalidate_file FINAL.md
+      ;;
+    synthesis)
+      invalidate_tree findings
+      invalidate_file FINAL.md
+      ;;
+    extract)
+      invalidate_tree findings
+      mkdir -p "$work_dir/findings"
+      invalidate_file FINAL.md
+      ;;
+    score)
+      invalidate_file FINAL.md
+      ;;
+  esac
+}
+
+# A provider stage without a valid completion marker is going to run again. Its old
+# output must not survive in the work tree, and any downstream checkpoints derived from
+# the old input must be invalidated before the provider starts. This also handles a
+# crash between atomically writing checkpoint data and publishing its completion marker.
+if [ -n "$target" ]; then
+  invalidate_downstream
+  rm -f "$marker" "$checkpoint" "$target" 2>/dev/null || true
+fi
 
 slot_owned=""
 slot_claim=""

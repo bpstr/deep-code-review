@@ -5,8 +5,8 @@ umask 077
 # Durable orchestration wrapper for Deep Code Review.
 # Keep compatible with Bash 3.2 (default Bash on macOS).
 
-RUNNER_VERSION="1.1.0"
-RUNNER_SCHEMA="2"
+RUNNER_VERSION="1.1.1"
+RUNNER_SCHEMA="3"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENGINE="$SCRIPT_DIR/deep-review-engine.sh"
 PROVIDER_SHIM_SOURCE="$SCRIPT_DIR/deep-review-provider-shim.sh"
@@ -225,6 +225,13 @@ fingerprint_stream() {
   git -C "$ROOT_DIR" status --porcelain=v1 2>/dev/null || true
   git -C "$ROOT_DIR" diff --no-ext-diff HEAD 2>/dev/null || true
   git -C "$ROOT_DIR" diff --no-ext-diff --cached 2>/dev/null || true
+  # `git status` records only the path for untracked files. Hash their contents as well
+  # so an interrupted `--changes` review is never resumed after an untracked file changed.
+  git -C "$ROOT_DIR" ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    printf 'untracked=%s:' "$file"
+    git -C "$ROOT_DIR" hash-object -- "$file" 2>/dev/null || true
+  done
 }
 FINGERPRINT="$(fingerprint_stream | cksum | awk '{print $1 "-" $2}')"
 
@@ -237,13 +244,23 @@ BOOT_ID="$(boot_identity | cksum | awk '{print $1 "-" $2}')"
 
 lock_is_live() {
   run="$1"
-  [ -d "$run/.lock" ] || return 1
-  # A just-created lock may not have its metadata yet. Treat that tiny window as live
-  # instead of deleting another simultaneous run's claim.
-  [ -s "$run/.lock/pid" ] || return 0
-  [ -s "$run/.lock/boot" ] || return 0
-  lock_pid="$(cat "$run/.lock/pid" 2>/dev/null || true)"
-  lock_boot="$(cat "$run/.lock/boot" 2>/dev/null || true)"
+  lock="$run/.lock"
+  [ -e "$lock" ] || return 1
+
+  if [ -f "$lock" ]; then
+    lock_pid="$(sed -n '1p' "$lock" 2>/dev/null || true)"
+    lock_boot="$(sed -n '2p' "$lock" 2>/dev/null || true)"
+  elif [ -d "$lock" ]; then
+    # Backward compatibility for 1.1.0 directory locks. Missing owner metadata is stale:
+    # a live 1.1.1 claimant publishes a complete owner record atomically below.
+    [ -s "$lock/pid" ] || return 1
+    [ -s "$lock/boot" ] || return 1
+    lock_pid="$(cat "$lock/pid" 2>/dev/null || true)"
+    lock_boot="$(cat "$lock/boot" 2>/dev/null || true)"
+  else
+    return 1
+  fi
+
   [ "$lock_boot" = "$BOOT_ID" ] || return 1
   case "$lock_pid" in *[!0-9]*|'') return 1;; esac
   kill -0 "$lock_pid" 2>/dev/null
@@ -251,14 +268,22 @@ lock_is_live() {
 
 claim_run() {
   run="$1"
-  if [ -d "$run/.lock" ]; then
+  lock="$run/.lock"
+  if [ -e "$lock" ]; then
     if lock_is_live "$run"; then return 1; fi
-    rm -rf "$run/.lock"
+    rm -rf "$lock"
   fi
-  mkdir "$run/.lock" 2>/dev/null || return 1
-  printf '%s\n' "$$" >"$run/.lock/pid"
-  printf '%s\n' "$BOOT_ID" >"$run/.lock/boot"
-  return 0
+
+  # Publish one complete owner record atomically. Unlike mkdir + two metadata writes,
+  # a power loss cannot leave a half-owned lock that later looks permanently live.
+  claim="$run/.lock-claim.$$-${RANDOM:-0}"
+  printf '%s\n%s\n' "$$" "$BOOT_ID" >"$claim"
+  if ln "$claim" "$lock" 2>/dev/null; then
+    rm -f "$claim"
+    return 0
+  fi
+  rm -f "$claim"
+  return 1
 }
 
 RUN_DIR=""
