@@ -51,31 +51,40 @@ fi
 [ -z "$marker" ] || rm -f "$marker"
 
 slot_owned=""
+slot_claim=""
 acquire_global_slot() {
   slot_root="${DEEP_REVIEW_GLOBAL_SLOT_DIR:?}"
   slot_max="${DEEP_REVIEW_GLOBAL_SLOT_MAX:-1}"
   mkdir -p "$slot_root"
+  slot_claim="$slot_root/.claim.$$"
+  printf '%s\n%s\n' "$$" "${DEEP_REVIEW_BOOT_ID:-unknown}" >"$slot_claim"
   while :; do
     i=1
     while [ "$i" -le "$slot_max" ]; do
       slot="$slot_root/$i"
-      if mkdir "$slot" 2>/dev/null; then
-        printf '%s\n' "$$" >"$slot/pid"
-        printf '%s\n' "${DEEP_REVIEW_BOOT_ID:-unknown}" >"$slot/boot"
+      # A hard-link claim is atomic and the complete owner record exists before the slot
+      # becomes visible. That avoids leaving an unrecoverable half-written mutex on crash.
+      if ln "$slot_claim" "$slot" 2>/dev/null; then
+        rm -f "$slot_claim"
+        slot_claim=""
         slot_owned="$slot"
         return 0
       fi
-      if [ -s "$slot/pid" ] && [ -s "$slot/boot" ]; then
-        slot_pid="$(cat "$slot/pid" 2>/dev/null || true)"
-        slot_boot="$(cat "$slot/boot" 2>/dev/null || true)"
+      if [ -s "$slot" ]; then
+        slot_pid="$(sed -n '1p' "$slot" 2>/dev/null || true)"
+        slot_boot="$(sed -n '2p' "$slot" 2>/dev/null || true)"
         stale=0
         [ "$slot_boot" = "${DEEP_REVIEW_BOOT_ID:-unknown}" ] || stale=1
         case "$slot_pid" in *[!0-9]*|'') stale=1;; esac
         if [ "$stale" -eq 0 ] && ! kill -0 "$slot_pid" 2>/dev/null; then stale=1; fi
         if [ "$stale" -eq 1 ]; then
-          rm -rf "$slot" 2>/dev/null || true
+          rm -f "$slot" 2>/dev/null || true
           continue
         fi
+      else
+        # Empty/malformed legacy slot files are never valid owners.
+        rm -f "$slot" 2>/dev/null || true
+        continue
       fi
       i=$((i + 1))
     done
@@ -83,8 +92,10 @@ acquire_global_slot() {
   done
 }
 release_global_slot() {
-  [ -z "$slot_owned" ] || rm -rf "$slot_owned" 2>/dev/null || true
+  [ -z "$slot_owned" ] || rm -f "$slot_owned" 2>/dev/null || true
+  [ -z "$slot_claim" ] || rm -f "$slot_claim" 2>/dev/null || true
   slot_owned=""
+  slot_claim=""
 }
 
 provider_pid=""
