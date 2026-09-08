@@ -6,6 +6,7 @@ bash -n skills/deep-review/scripts/deep-review.sh
 bash -n skills/deep-review/scripts/deep-review-engine.sh
 bash -n skills/deep-review/scripts/deep-review-provider-shim.sh
 bash -n skills/deep-review/scripts/deep-review-mktemp-shim.sh
+bash -n scripts/test-deep-review-recovery.sh
 
 output="$(bash skills/deep-review/scripts/deep-review.sh --help)"
 grep -q -- '--provider codex|claude|auto' <<<"$output"
@@ -21,9 +22,11 @@ grep -q -- 'vite' <<<"$output"
 grep -q -- 'CONFIDENCE_THRESHOLD' <<<"$output"
 
 version="$(bash skills/deep-review/scripts/deep-review.sh --version)"
-[ "$version" = 'Deep Code Review 1.1.0' ]
+[ "$version" = 'Deep Code Review 1.1.1' ]
 
 grep -q 'FULL=.*accessibility-scanner' skills/deep-review/scripts/deep-review-engine.sh
 grep -q 'a11y) echo accessibility-scanner' skills/deep-review/scripts/deep-review-engine.sh
+
+bash scripts/test-deep-review-recovery.sh
 
 echo "deep-review runner smoke test passed"
