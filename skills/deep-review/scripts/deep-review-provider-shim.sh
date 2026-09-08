@@ -92,6 +92,7 @@ invalidate_downstream() {
       ;;
     extract)
       invalidate_tree findings
+      mkdir -p "$work_dir/findings"
       invalidate_file FINAL.md
       ;;
     score)
