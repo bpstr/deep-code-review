@@ -18,6 +18,8 @@ bash "$SKILL_DIR/scripts/deep-review.sh" [scope] [aspects...]
 
 The runner auto-detects Codex first and Claude second, builds shared stack/version context for stack-sensitive reviews, launches isolated specialist processes, synthesizes findings, confidence-scores them, and performs final P0/P1/P2 triage.
 
+The final Markdown report is both returned on stdout and persisted as `artifacts/review.md`. When the caller can surface stdout to the user, show the report directly rather than only pointing to the saved file.
+
 ## Intent mapping
 
 Translate natural-language requests into the narrowest useful review set:
@@ -67,6 +69,31 @@ DEEP_REVIEW_AUTO_SPECIALISTS=0 bash "$SKILL_DIR/scripts/deep-review.sh" full
 ```
 
 Existing aspect names and direct reviewer IDs remain valid. `smart` is an explicit alias for a full stack-aware review. Explicit stack reviewers still receive stack profiling even when automatic routing is disabled.
+
+## Durable results, CI, and cloud runners
+
+The public runner owns recovery state and result persistence. Completed stage checkpoints are resumable after interruption, and the completed report is always available as the canonical `artifacts/review.md` while also being printed to stdout.
+
+Useful output controls:
+
+```bash
+# Export one exact result file atomically
+bash "$SKILL_DIR/scripts/deep-review.sh" --output ./review.md full
+
+# Keep timestamped/unique exports plus latest.md in a result directory
+bash "$SKILL_DIR/scripts/deep-review.sh" --results-dir /secure/results full
+
+# Discover the latest durable result
+bash "$SKILL_DIR/scripts/deep-review.sh" --latest-result
+```
+
+Equivalent environment variables are `DEEP_REVIEW_RESULT_FILE`, `DEEP_REVIEW_RESULTS_DIR`, and `DEEP_REVIEW_STATE_DIR`. Treat recovery state and public/exported results as separate storage concerns: use job-local temporary state when persistence is unnecessary, and point results to a secured mounted volume or CI artifact staging path when reports need to survive containers, jobs, or hosts. Persistent recovery state may also use a mounted volume, but namespace it per runner/process environment rather than sharing one live state namespace concurrently across unrelated hosts.
+
+Provider-slot coordination is deliberately machine-local and separate from persistent state. Override it with `DEEP_REVIEW_SLOT_DIR` only when you need a different private local runtime filesystem; do not place PID/boot slot files on NFS or another cross-host result/state volume.
+
+CI/cloud defaults avoid assuming that `HOME` is writable. In recognized CI environments the runner prefers `RUNNER_TEMP`; when no stable job temp directory exists it creates a private random temp state root, so set `DEEP_REVIEW_STATE_DIR` explicitly if later invocations in that environment need recovery/discovery. Files are created with private permissions and explicit result exports are atomically replaced. On GitHub Actions, only result/artifact paths are published to `GITHUB_OUTPUT`; report contents are not copied into CI metadata.
+
+Confidence validation is batched to reduce execution time and provider startup overhead. `DEEP_REVIEW_SCORE_BATCH_SIZE` controls findings per fast-model confidence call (default `4`). Completed batches are durable recovery units, so an interruption loses at most the currently running small batch rather than all prior confidence work.
 
 ## Specialist boundaries
 
@@ -135,6 +162,8 @@ The review is analysis-only. Review agents must not modify repository source fil
 
 Honor both `AGENTS.md` and `CLAUDE.md` when present. For provider-specific conflicts, prefer the active provider's native instructions without weakening repository safety rules.
 
+Persistent state and exported reports can contain proprietary source references and review findings. Keep them on private storage, do not upload them implicitly, and do not place report bodies in CI environment/output metadata.
+
 ## Output
 
-Present the final P0/P1/P2 report produced by the runner. Mention review gaps if any specialist or shared stack profiling failed. Do not automatically fix findings unless the user explicitly asks for fixes.
+Present the final P0/P1/P2 report produced by the runner to the user and mention the saved result path when it is available. Mention review gaps if any specialist or shared stack profiling failed. Do not automatically fix findings unless the user explicitly asks for fixes.

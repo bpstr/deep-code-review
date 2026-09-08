@@ -23,6 +23,7 @@ run_dir="${DEEP_REVIEW_PERSISTENT_RUN_DIR:?}"
 work_dir="${DEEP_REVIEW_ACTIVE_WORK_DIR:?}"
 target=""
 stage=""
+batch_findings=""
 case "$prompt" in
   *"specialized READ-ONLY code analysis agent"*)
     stage=reviewer
@@ -31,6 +32,11 @@ case "$prompt" in
   *"stack profiling instructions"*) stage=stack; target="$work_dir/stack-context.md" ;;
   *"synthesis agent for a multi-agent code review"*) stage=synthesis; target="$work_dir/REPORT.md" ;;
   *"extract every distinct code-review finding"*) stage=extract; target="$work_dir/findings/count.txt" ;;
+  *"independent code-review confidence scorer for a batch"*)
+    stage=score-batch
+    target="$(printf '%s\n' "$prompt" | sed -n 's/^Score batch marker: //p' | head -1)"
+    batch_findings="$(printf '%s\n' "$prompt" | sed -n 's/^Batch findings:[[:space:]]*//p' | head -1)"
+    ;;
   *"independent code-review confidence scorer"*)
     stage=score
     target="$(printf '%s\n' "$prompt" | sed -n 's/^Write exactly two lines to \(.*\):$/\1/p' | head -1)"
@@ -46,9 +52,24 @@ if [ -n "$target" ]; then
   checkpoint="$run_dir/checkpoints/data/$rel"
   marker="$run_dir/checkpoints/complete/$rel"
 fi
-if [ -n "$target" ] && [ -s "$checkpoint" ] && [ -f "$marker" ]; then
+
+batch_checkpoint_valid() {
+  [ "$stage" = score-batch ] || return 0
+  [ -n "$batch_findings" ] || return 1
+  for n in $batch_findings; do
+    [ -s "$run_dir/checkpoints/data/findings/score-$n.txt" ] || return 1
+  done
+  return 0
+}
+
+if [ -n "$target" ] && [ -s "$checkpoint" ] && [ -f "$marker" ] && batch_checkpoint_valid; then
   mkdir -p "$(dirname "$target")"
   cp "$checkpoint" "$target"
+  if [ "$stage" = score-batch ]; then
+    for n in $batch_findings; do
+      cp "$run_dir/checkpoints/data/findings/score-$n.txt" "$work_dir/findings/score-$n.txt"
+    done
+  fi
   printf 'Recovered completed stage: %s\n' "$rel" >&2
   exit 0
 fi
@@ -68,8 +89,6 @@ invalidate_tree() {
 invalidate_downstream() {
   case "$stage" in
     stack)
-      # A newly generated stack profile can change every specialist conclusion. Remove
-      # all recovered provider outputs while keeping engine-owned scope and shim files.
       data_root="$run_dir/checkpoints/data"
       if [ -d "$data_root" ]; then
         find "$data_root" -type f -print 2>/dev/null | while IFS= read -r old; do
@@ -81,7 +100,6 @@ invalidate_downstream() {
       mkdir -p "$run_dir/checkpoints/data" "$run_dir/checkpoints/complete"
       ;;
     reviewer)
-      # A reviewer that was missing or incomplete may now contribute new findings.
       invalidate_file REPORT.md
       invalidate_tree findings
       invalidate_file FINAL.md
@@ -98,13 +116,13 @@ invalidate_downstream() {
     score)
       invalidate_file FINAL.md
       ;;
+    score-batch)
+      for n in $batch_findings; do invalidate_file "findings/score-$n.txt"; done
+      invalidate_file FINAL.md
+      ;;
   esac
 }
 
-# A provider stage without a valid completion marker is going to run again. Its old
-# output must not survive in the work tree, and any downstream checkpoints derived from
-# the old input must be invalidated before the provider starts. This also handles a
-# crash between atomically writing checkpoint data and publishing its completion marker.
 if [ -n "$target" ]; then
   invalidate_downstream
   rm -f "$marker" "$checkpoint" "$target" 2>/dev/null || true
@@ -122,8 +140,6 @@ acquire_global_slot() {
     i=1
     while [ "$i" -le "$slot_max" ]; do
       slot="$slot_root/$i"
-      # A hard-link claim is atomic and the complete owner record exists before the slot
-      # becomes visible. That avoids leaving an unrecoverable half-written mutex on crash.
       if ln "$slot_claim" "$slot" 2>/dev/null; then
         rm -f "$slot_claim"
         slot_claim=""
@@ -142,13 +158,12 @@ acquire_global_slot() {
           continue
         fi
       else
-        # Empty/malformed legacy slot files are never valid owners.
         rm -f "$slot" 2>/dev/null || true
         continue
       fi
       i=$((i + 1))
     done
-    sleep 1
+    sleep 0.2
   done
 }
 release_global_slot() {
@@ -164,8 +179,6 @@ forward_provider_signal() {
   if [ -n "$provider_pid" ]; then
     kill -"$signal" "$provider_pid" 2>/dev/null || true
   else
-    # A shim may be waiting for a global memory slot before its provider exists.
-    # Exit promptly so engine shutdown cannot leave a slot waiter orphaned.
     release_global_slot
     exit 143
   fi
@@ -182,8 +195,35 @@ status=$?
 provider_pid=""
 release_global_slot
 trap - TERM INT HUP
+
+checkpoint_file_atomic() {
+  source_file="$1"
+  destination="$2"
+  mkdir -p "$(dirname "$destination")"
+  tmp="$destination.tmp.$$"
+  if ! cp "$source_file" "$tmp" || ! mv "$tmp" "$destination"; then
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+if [ "$status" -eq 0 ] && [ "$stage" = score-batch ]; then
+  complete=1
+  [ -n "$batch_findings" ] || complete=0
+  for n in $batch_findings; do
+    score_file="$work_dir/findings/score-$n.txt"
+    [ -s "$score_file" ] || complete=0
+  done
+  [ "$complete" -eq 1 ] || exit 1
+
+  for n in $batch_findings; do
+    score_file="$work_dir/findings/score-$n.txt"
+    checkpoint_file_atomic "$score_file" "$run_dir/checkpoints/data/findings/score-$n.txt" || exit 1
+  done
+  printf 'complete\n' >"$target"
+fi
+
 if [ "$status" -eq 0 ] && [ -n "$target" ] && [ -s "$target" ]; then
-  # Extractor completion is only durable when every declared finding exists.
   if [ "$target" = "$work_dir/findings/count.txt" ]; then
     count="$(tr -dc '0-9' <"$target" 2>/dev/null || true)"
     case "$count" in *[!0-9]*|'') count=-1;; esac
@@ -196,27 +236,16 @@ if [ "$status" -eq 0 ] && [ -n "$target" ] && [ -s "$target" ]; then
         n=$((n + 1))
       done
       [ "$complete" -eq 1 ] || exit "$status"
-      mkdir -p "$run_dir/checkpoints/data/findings"
-      checkpoint_ok=1
       n=1
       while [ "$n" -le "$count" ]; do
         finding="$work_dir/findings/finding-$n.md"
-        tmp="$run_dir/checkpoints/data/findings/finding-$n.md.tmp.$$"
-        if ! cp "$finding" "$tmp" || ! mv "$tmp" "$run_dir/checkpoints/data/findings/finding-$n.md"; then
-          rm -f "$tmp"
-          checkpoint_ok=0
-        fi
+        checkpoint_file_atomic "$finding" "$run_dir/checkpoints/data/findings/finding-$n.md" || exit 1
         n=$((n + 1))
       done
-      [ "$checkpoint_ok" -eq 1 ] || exit 1
     fi
   fi
   mkdir -p "$(dirname "$checkpoint")" "$(dirname "$marker")"
-  checkpoint_tmp="$checkpoint.tmp.$$"
-  if ! cp "$target" "$checkpoint_tmp" || ! mv "$checkpoint_tmp" "$checkpoint"; then
-    rm -f "$checkpoint_tmp"
-    exit 1
-  fi
+  checkpoint_file_atomic "$target" "$checkpoint" || exit 1
   marker_tmp="$marker.tmp.$$"
   printf 'complete\n' >"$marker_tmp"
   mv "$marker_tmp" "$marker"
