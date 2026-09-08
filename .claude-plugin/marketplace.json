@@ -11,7 +11,7 @@
       "name": "deep-review",
       "source": "./",
       "description": "Comprehensive code review skill with 60 specialized agents for architecture, code quality, error handling, types, comments, tests, accessibility, localization, concurrency, performance, simplification, security, and 30 platform-specific reviews with automatic detection and confidence scoring.",
-      "version": "5.9.0",
+      "version": "5.9.1",
       "author": {
         "name": "Iron-Ham"
       },
