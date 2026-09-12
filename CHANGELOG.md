@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.1 — 2026-09-12
+## Unreleased — 2026-09-12
 
 - Bound machine-wide provider-slot waits with an explicit timeout instead of allowing silent indefinite queueing.
 - Persist and log provider lifecycle states (`queued`, `running`, `completed`, `failed`, `cancelled`, `timed_out`) with stage runtimes for diagnostics.
