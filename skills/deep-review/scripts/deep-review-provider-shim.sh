@@ -43,6 +43,7 @@ case "$prompt" in
     ;;
   *"final code-review triage editor"*) stage=final; target="$work_dir/FINAL.md" ;;
 esac
+[ -n "$stage" ] || stage=provider
 
 checkpoint=""
 marker=""
@@ -52,6 +53,38 @@ if [ -n "$target" ]; then
   checkpoint="$run_dir/checkpoints/data/$rel"
   marker="$run_dir/checkpoints/complete/$rel"
 fi
+
+lifecycle_dir="$work_dir/lifecycle"
+mkdir -p "$lifecycle_dir"
+label="$stage"
+[ -z "$rel" ] || label="$stage:$rel"
+lifecycle_key="$(printf '%s' "$label" | tr '/ :\t' '____' | tr -cd '[:alnum:]_.-')"
+[ -n "$lifecycle_key" ] || lifecycle_key=provider
+lifecycle_file="$lifecycle_dir/$lifecycle_key-$$.state"
+write_state() {
+  state="$1"
+  detail="${2:-}"
+  now="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date)"
+  {
+    printf 'state=%s\n' "$state"
+    printf 'stage=%s\n' "$stage"
+    printf 'label=%s\n' "$label"
+    printf 'provider=%s\n' "$provider"
+    printf 'shim_pid=%s\n' "$$"
+    printf 'updated_at=%s\n' "$now"
+    [ -z "$detail" ] || printf 'detail=%s\n' "$detail"
+  } >"$lifecycle_file.tmp.$$"
+  mv "$lifecycle_file.tmp.$$" "$lifecycle_file"
+}
+log_state() {
+  state="$1"
+  detail="${2:-}"
+  if [ -n "$detail" ]; then
+    printf '[deep-review] %s %s (%s)\n' "$state" "$label" "$detail" >&2
+  else
+    printf '[deep-review] %s %s\n' "$state" "$label" >&2
+  fi
+}
 
 batch_checkpoint_valid() {
   [ "$stage" = score-batch ] || return 0
@@ -70,6 +103,7 @@ if [ -n "$target" ] && [ -s "$checkpoint" ] && [ -f "$marker" ] && batch_checkpo
       cp "$run_dir/checkpoints/data/findings/score-$n.txt" "$work_dir/findings/score-$n.txt"
     done
   fi
+  write_state recovered "checkpoint=$rel"
   printf 'Recovered completed stage: %s\n' "$rel" >&2
   exit 0
 fi
@@ -128,14 +162,66 @@ if [ -n "$target" ]; then
   rm -f "$marker" "$checkpoint" "$target" 2>/dev/null || true
 fi
 
+positive_integer() {
+  case "$1" in *[!0-9]*|'') return 1;; esac
+  [ "$1" -gt 0 ]
+}
+SLOT_WAIT_TIMEOUT="${DEEP_REVIEW_SLOT_WAIT_TIMEOUT_SECONDS:-120}"
+SLOT_STATUS_INTERVAL="${DEEP_REVIEW_SLOT_STATUS_INTERVAL_SECONDS:-5}"
+PROVIDER_TIMEOUT="${DEEP_REVIEW_PROVIDER_TIMEOUT_SECONDS:-1800}"
+TERMINATION_GRACE="${DEEP_REVIEW_PROVIDER_TERMINATION_GRACE_SECONDS:-10}"
+positive_integer "$SLOT_WAIT_TIMEOUT" || { echo "DEEP_REVIEW_SLOT_WAIT_TIMEOUT_SECONDS must be positive." >&2; exit 2; }
+positive_integer "$SLOT_STATUS_INTERVAL" || { echo "DEEP_REVIEW_SLOT_STATUS_INTERVAL_SECONDS must be positive." >&2; exit 2; }
+positive_integer "$PROVIDER_TIMEOUT" || { echo "DEEP_REVIEW_PROVIDER_TIMEOUT_SECONDS must be positive." >&2; exit 2; }
+positive_integer "$TERMINATION_GRACE" || { echo "DEEP_REVIEW_PROVIDER_TERMINATION_GRACE_SECONDS must be positive." >&2; exit 2; }
+
+process_identity() {
+  pid="$1"
+  case "$pid" in *[!0-9]*|'') return 1;; esac
+  if [ -r "/proc/$pid/stat" ]; then
+    awk '{print $22}' "/proc/$pid/stat" 2>/dev/null && return 0
+  fi
+  if command -v ps >/dev/null 2>&1; then
+    ps -o lstart= -p "$pid" 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep . && return 0
+  fi
+  return 1
+}
+
 slot_owned=""
 slot_claim=""
+release_global_slot() {
+  [ -z "$slot_owned" ] || rm -f "$slot_owned" 2>/dev/null || true
+  [ -z "$slot_claim" ] || rm -f "$slot_claim" 2>/dev/null || true
+  slot_owned=""
+  slot_claim=""
+}
+slot_is_stale() {
+  slot="$1"
+  [ -s "$slot" ] || return 0
+  slot_pid="$(sed -n '1p' "$slot" 2>/dev/null || true)"
+  slot_boot="$(sed -n '2p' "$slot" 2>/dev/null || true)"
+  slot_identity="$(sed -n '3p' "$slot" 2>/dev/null || true)"
+  [ "$slot_boot" = "${DEEP_REVIEW_BOOT_ID:-unknown}" ] || return 0
+  case "$slot_pid" in *[!0-9]*|'') return 0;; esac
+  kill -0 "$slot_pid" 2>/dev/null || return 0
+  current_identity="$(process_identity "$slot_pid" 2>/dev/null || true)"
+  # Old two-line slots remain valid only when we cannot obtain a stronger identity.
+  if [ -n "$slot_identity" ] && [ -n "$current_identity" ] && [ "$slot_identity" != "$current_identity" ]; then
+    return 0
+  fi
+  return 1
+}
 acquire_global_slot() {
   slot_root="${DEEP_REVIEW_GLOBAL_SLOT_DIR:?}"
   slot_max="${DEEP_REVIEW_GLOBAL_SLOT_MAX:-1}"
   mkdir -p "$slot_root"
+  self_identity="$(process_identity "$$" 2>/dev/null || true)"
   slot_claim="$slot_root/.claim.$$"
-  printf '%s\n%s\n' "$$" "${DEEP_REVIEW_BOOT_ID:-unknown}" >"$slot_claim"
+  printf '%s\n%s\n%s\n' "$$" "${DEEP_REVIEW_BOOT_ID:-unknown}" "$self_identity" >"$slot_claim"
+  started="$(date +%s)"
+  next_status="$started"
+  write_state queued "slots=$slot_max timeout=${SLOT_WAIT_TIMEOUT}s"
+  log_state queued "waiting for provider slot; timeout=${SLOT_WAIT_TIMEOUT}s"
   while :; do
     i=1
     while [ "$i" -le "$slot_max" ]; do
@@ -146,55 +232,103 @@ acquire_global_slot() {
         slot_owned="$slot"
         return 0
       fi
-      if [ -s "$slot" ]; then
-        slot_pid="$(sed -n '1p' "$slot" 2>/dev/null || true)"
-        slot_boot="$(sed -n '2p' "$slot" 2>/dev/null || true)"
-        stale=0
-        [ "$slot_boot" = "${DEEP_REVIEW_BOOT_ID:-unknown}" ] || stale=1
-        case "$slot_pid" in *[!0-9]*|'') stale=1;; esac
-        if [ "$stale" -eq 0 ] && ! kill -0 "$slot_pid" 2>/dev/null; then stale=1; fi
-        if [ "$stale" -eq 1 ]; then
-          rm -f "$slot" 2>/dev/null || true
-          continue
-        fi
-      else
+      if slot_is_stale "$slot"; then
         rm -f "$slot" 2>/dev/null || true
         continue
       fi
       i=$((i + 1))
     done
+    now="$(date +%s)"
+    elapsed=$((now - started))
+    if [ "$elapsed" -ge "$SLOT_WAIT_TIMEOUT" ]; then
+      write_state timed_out "phase=queue waited=${elapsed}s slots=$slot_max"
+      log_state timed_out "provider slot unavailable after ${elapsed}s"
+      release_global_slot
+      return 75
+    fi
+    if [ "$now" -ge "$next_status" ]; then
+      write_state queued "waited=${elapsed}s slots=$slot_max"
+      [ "$elapsed" -eq 0 ] || log_state queued "waited=${elapsed}s; slots=$slot_max"
+      next_status=$((now + SLOT_STATUS_INTERVAL))
+    fi
     sleep 0.2
   done
 }
-release_global_slot() {
-  [ -z "$slot_owned" ] || rm -f "$slot_owned" 2>/dev/null || true
-  [ -z "$slot_claim" ] || rm -f "$slot_claim" 2>/dev/null || true
-  slot_owned=""
-  slot_claim=""
-}
 
 provider_pid=""
+watchdog_pid=""
+shutdown_requested=0
+shutdown_signal=""
+timed_out=0
 forward_provider_signal() {
   signal="$1"
+  shutdown_requested=1
+  shutdown_signal="$signal"
   if [ -n "$provider_pid" ]; then
     kill -"$signal" "$provider_pid" 2>/dev/null || true
   else
+    write_state cancelled "phase=queue signal=$signal"
     release_global_slot
     exit 143
   fi
 }
+timeout_provider() {
+  timed_out=1
+  shutdown_requested=1
+  shutdown_signal=TERM
+  write_state timed_out "phase=running timeout=${PROVIDER_TIMEOUT}s"
+  log_state timed_out "provider exceeded ${PROVIDER_TIMEOUT}s; terminating"
+  [ -z "$provider_pid" ] || kill -TERM "$provider_pid" 2>/dev/null || true
+}
 trap 'forward_provider_signal TERM' TERM
 trap 'forward_provider_signal INT' INT
 trap 'forward_provider_signal HUP' HUP
+trap 'timeout_provider' USR1
 
-acquire_global_slot
+if ! acquire_global_slot; then
+  exit $?
+fi
+write_state running "slot=$(basename "$slot_owned") timeout=${PROVIDER_TIMEOUT}s"
+log_state running "slot=$(basename "$slot_owned")"
 "$real" "$@" &
 provider_pid=$!
-wait "$provider_pid"
-status=$?
+(
+  sleep "$PROVIDER_TIMEOUT"
+  kill -USR1 "$$" 2>/dev/null || true
+) &
+watchdog_pid=$!
+
+status=0
+while :; do
+  wait "$provider_pid"
+  status=$?
+  if ! kill -0 "$provider_pid" 2>/dev/null; then
+    break
+  fi
+  # wait can be interrupted by one of our traps while the provider is still alive.
+  # Never release the provider slot until that process is actually gone.
+  if [ "$shutdown_requested" -eq 1 ]; then
+    grace_started="$(date +%s)"
+    while kill -0 "$provider_pid" 2>/dev/null; do
+      now="$(date +%s)"
+      if [ $((now - grace_started)) -ge "$TERMINATION_GRACE" ]; then
+        log_state terminating "provider ignored ${shutdown_signal:-TERM}; sending KILL"
+        kill -KILL "$provider_pid" 2>/dev/null || true
+        break
+      fi
+      sleep 0.2
+    done
+    wait "$provider_pid" 2>/dev/null || true
+    if [ "$timed_out" -eq 1 ]; then status=124; else status=143; fi
+    break
+  fi
+done
 provider_pid=""
+[ -z "$watchdog_pid" ] || kill "$watchdog_pid" 2>/dev/null || true
+[ -z "$watchdog_pid" ] || wait "$watchdog_pid" 2>/dev/null || true
+watchdog_pid=""
 release_global_slot
-trap - TERM INT HUP
+trap - TERM INT HUP USR1
 
 checkpoint_file_atomic() {
   source_file="$1"
@@ -249,5 +383,17 @@ if [ "$status" -eq 0 ] && [ -n "$target" ] && [ -s "$target" ]; then
   marker_tmp="$marker.tmp.$$"
   printf 'complete\n' >"$marker_tmp"
   mv "$marker_tmp" "$marker"
+fi
+
+if [ "$status" -eq 0 ]; then
+  write_state completed
+  log_state completed
+elif [ "$status" -eq 124 ] || [ "$timed_out" -eq 1 ]; then
+  write_state timed_out "phase=running exit=$status"
+elif [ "$status" -eq 143 ] && [ "$shutdown_requested" -eq 1 ]; then
+  write_state cancelled "signal=${shutdown_signal:-TERM}"
+else
+  write_state failed "exit=$status"
+  log_state failed "exit=$status"
 fi
 exit "$status"
