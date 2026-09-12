@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.1 — 2026-09-12
+
+- Bound machine-wide provider-slot waits with an explicit timeout instead of allowing silent indefinite queueing.
+- Persist and log provider lifecycle states (`queued`, `running`, `completed`, `failed`, `cancelled`, `timed_out`) with stage runtimes for diagnostics.
+- Strengthen slot ownership with process-start identity in addition to PID and boot identity, reducing false ownership after PID reuse.
+- Keep provider capacity reserved until the provider process tree actually terminates; cancellation and execution timeouts escalate from graceful termination to forced kill after a bounded grace period.
+- Add per-stage provider execution timeouts and regular queued-status reporting.
+- Correct the documented fast-stage model environment variable to `DEEP_REVIEW_FAST_MODEL`.
+- Add deterministic lifecycle regression coverage and a GitHub Actions test gate for the shell runner suite.
+
 ## 1.2.0 — 2026-09-08
 
 - Batch confidence validation by default (four findings per fast-model call) to reduce provider startup/token overhead while preserving per-finding scores and resumable batch checkpoints.
