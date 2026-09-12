@@ -16,6 +16,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run shell regression suite
+      - name: Shell syntax
         shell: bash
-        run: bash scripts/test-deep-review.sh
+        run: |
+          bash -n scripts/deep-review.sh
+          bash -n skills/deep-review/scripts/deep-review.sh
+          bash -n skills/deep-review/scripts/deep-review-engine.sh
+          bash -n skills/deep-review/scripts/deep-review-provider-shim.sh
+          bash -n skills/deep-review/scripts/deep-review-mktemp-shim.sh
+          bash -n scripts/test-deep-review-recovery.sh
+          bash -n scripts/test-deep-review-efficiency.sh
+          bash -n scripts/test-provider-lifecycle.sh
+
+      - name: Provider lifecycle tests
+        shell: bash
+        run: bash -x scripts/test-provider-lifecycle.sh
+
+      - name: Recovery and resource tests
+        shell: bash
+        run: bash scripts/test-deep-review-recovery.sh
+
+      - name: Efficiency and output tests
+        shell: bash
+        run: bash scripts/test-deep-review-efficiency.sh
+
+      - name: Runner smoke assertions
+        shell: bash
+        run: |
+          output="$(bash skills/deep-review/scripts/deep-review.sh --help)"
+          grep -q -- '--provider codex|claude|auto' <<<"$output"
+          grep -q -- '--changes' <<<"$output"
+          grep -q -- '--no-auto-specialists' <<<"$output"
+          grep -q -- '--no-resume' <<<"$output"
+          grep -q -- '--latest-result' <<<"$output"
+          version="$(bash skills/deep-review/scripts/deep-review.sh --version)"
+          test "$version" = 'Deep Code Review 1.2.0'
+          grep -q 'FULL=.*accessibility-scanner' skills/deep-review/scripts/deep-review-engine.sh
+          grep -q 'confidence scorer for a batch' skills/deep-review/scripts/deep-review-engine.sh
