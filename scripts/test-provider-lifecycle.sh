@@ -28,6 +28,14 @@ chmod +x "$TMP/bin/fake-codex"
 
 boot_id="test-boot"
 
+fail_with_log() {
+  message="$1"
+  log_file="$2"
+  echo "$message" >&2
+  [ ! -f "$log_file" ] || cat "$log_file" >&2
+  return 1
+}
+
 run_queue_test() {
   printf '%s\n%s\n' "$$" "$boot_id" >"$TMP/slots/1"
   set +e
@@ -44,11 +52,11 @@ run_queue_test() {
     "$TMP/bin/codex" 'generic prompt' >"$TMP/queue.out" 2>"$TMP/queue.err"
   queue_status=$?
   set -e
-  [ "$queue_status" -eq 75 ]
-  grep -q '\[deep-review\] queued provider' "$TMP/queue.err"
-  grep -q '\[deep-review\] timed_out provider' "$TMP/queue.err"
-  grep -R -q '^state=timed_out$' "$TMP/work/lifecycle"
-  [ ! -e "$TMP/provider-unused.started" ]
+  [ "$queue_status" -eq 75 ] || fail_with_log "queue test expected exit 75, got $queue_status" "$TMP/queue.err"
+  grep -q '\[deep-review\] queued provider' "$TMP/queue.err" || fail_with_log "queue test missing queued state" "$TMP/queue.err"
+  grep -q '\[deep-review\] timed_out provider' "$TMP/queue.err" || fail_with_log "queue test missing timed_out state" "$TMP/queue.err"
+  grep -R -q '^state=timed_out$' "$TMP/work/lifecycle" || fail_with_log "queue test missing lifecycle artifact" "$TMP/queue.err"
+  [ ! -e "$TMP/provider-unused.started" ] || fail_with_log "queue test unexpectedly started provider" "$TMP/queue.err"
   echo "queue lifecycle test passed"
 }
 
@@ -71,20 +79,20 @@ run_cancel_test() {
 
   n=0
   while [ ! -e "$TMP/provider.started" ] && [ "$n" -lt 100 ]; do sleep 0.05; n=$((n + 1)); done
-  [ -e "$TMP/provider.started" ]
+  [ -e "$TMP/provider.started" ] || fail_with_log "cancel test provider did not start" "$TMP/cancel.err"
   provider_pid="$(cat "$TMP/provider.pid")"
-  kill -0 "$provider_pid"
-  [ -e "$TMP/slots/1" ]
+  kill -0 "$provider_pid" || fail_with_log "cancel test provider not alive before cancellation" "$TMP/cancel.err"
+  [ -e "$TMP/slots/1" ] || fail_with_log "cancel test provider slot missing before cancellation" "$TMP/cancel.err"
   kill -TERM "$shim_pid"
   set +e
   wait "$shim_pid"
   cancel_status=$?
   set -e
-  [ "$cancel_status" -eq 143 ]
-  ! kill -0 "$provider_pid" 2>/dev/null
-  [ ! -e "$TMP/slots/1" ]
-  grep -q 'sending KILL' "$TMP/cancel.err"
-  grep -R -q '^state=cancelled$' "$TMP/work/lifecycle"
+  [ "$cancel_status" -eq 143 ] || fail_with_log "cancel test expected exit 143, got $cancel_status" "$TMP/cancel.err"
+  ! kill -0 "$provider_pid" 2>/dev/null || fail_with_log "cancel test left provider alive" "$TMP/cancel.err"
+  [ ! -e "$TMP/slots/1" ] || fail_with_log "cancel test left provider slot allocated" "$TMP/cancel.err"
+  grep -q 'sending KILL' "$TMP/cancel.err" || fail_with_log "cancel test did not escalate to KILL" "$TMP/cancel.err"
+  grep -R -q '^state=cancelled$' "$TMP/work/lifecycle" || fail_with_log "cancel test missing cancelled state" "$TMP/cancel.err"
   echo "cancellation lifecycle test passed"
 }
 
@@ -108,12 +116,12 @@ run_timeout_test() {
   wait "$timeout_shim_pid"
   timeout_status=$?
   set -e
-  [ "$timeout_status" -eq 124 ]
+  [ "$timeout_status" -eq 124 ] || fail_with_log "timeout test expected exit 124, got $timeout_status" "$TMP/timeout.err"
   timeout_provider_pid="$(cat "$TMP/provider.pid")"
-  ! kill -0 "$timeout_provider_pid" 2>/dev/null
-  [ ! -e "$TMP/slots/1" ]
-  grep -q 'provider exceeded 1s' "$TMP/timeout.err"
-  grep -R -q '^state=timed_out$' "$TMP/work/lifecycle"
+  ! kill -0 "$timeout_provider_pid" 2>/dev/null || fail_with_log "timeout test left provider alive" "$TMP/timeout.err"
+  [ ! -e "$TMP/slots/1" ] || fail_with_log "timeout test left provider slot allocated" "$TMP/timeout.err"
+  grep -q 'provider exceeded 1s' "$TMP/timeout.err" || fail_with_log "timeout test missing timeout diagnostic" "$TMP/timeout.err"
+  grep -R -q '^state=timed_out$' "$TMP/work/lifecycle" || fail_with_log "timeout test missing timed_out state" "$TMP/timeout.err"
   echo "execution-timeout lifecycle test passed"
 }
 
