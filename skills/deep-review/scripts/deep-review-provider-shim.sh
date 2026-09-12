@@ -62,23 +62,24 @@ lifecycle_key="$(printf '%s' "$label" | tr '/ :\t' '____' | tr -cd '[:alnum:]_.-
 [ -n "$lifecycle_key" ] || lifecycle_key=provider
 lifecycle_file="$lifecycle_dir/$lifecycle_key-$$.state"
 write_state() {
-  state="$1"
-  detail="${2:-}"
-  now="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date)"
+  local state="$1"
+  local detail="${2:-}"
+  local state_now
+  state_now="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date)"
   {
     printf 'state=%s\n' "$state"
     printf 'stage=%s\n' "$stage"
     printf 'label=%s\n' "$label"
     printf 'provider=%s\n' "$provider"
     printf 'shim_pid=%s\n' "$$"
-    printf 'updated_at=%s\n' "$now"
+    printf 'updated_at=%s\n' "$state_now"
     [ -z "$detail" ] || printf 'detail=%s\n' "$detail"
   } >"$lifecycle_file.tmp.$$"
   mv "$lifecycle_file.tmp.$$" "$lifecycle_file"
 }
 log_state() {
-  state="$1"
-  detail="${2:-}"
+  local state="$1"
+  local detail="${2:-}"
   if [ -n "$detail" ]; then
     printf '[deep-review] %s %s (%s)\n' "$state" "$label" "$detail" >&2
   else
@@ -87,6 +88,7 @@ log_state() {
 }
 
 batch_checkpoint_valid() {
+  local n
   [ "$stage" = score-batch ] || return 0
   [ -n "$batch_findings" ] || return 1
   for n in $batch_findings; do
@@ -109,18 +111,19 @@ if [ -n "$target" ] && [ -s "$checkpoint" ] && [ -f "$marker" ] && batch_checkpo
 fi
 
 invalidate_file() {
-  stale_rel="$1"
+  local stale_rel="$1"
   rm -f "$run_dir/checkpoints/data/$stale_rel" \
         "$run_dir/checkpoints/complete/$stale_rel" \
         "$work_dir/$stale_rel" 2>/dev/null || true
 }
 invalidate_tree() {
-  stale_rel="$1"
+  local stale_rel="$1"
   rm -rf "$run_dir/checkpoints/data/$stale_rel" \
          "$run_dir/checkpoints/complete/$stale_rel" \
          "$work_dir/$stale_rel" 2>/dev/null || true
 }
 invalidate_downstream() {
+  local data_root old old_rel n
   case "$stage" in
     stack)
       data_root="$run_dir/checkpoints/data"
@@ -163,8 +166,9 @@ if [ -n "$target" ]; then
 fi
 
 positive_integer() {
-  case "$1" in *[!0-9]*|'') return 1;; esac
-  [ "$1" -gt 0 ]
+  local value="$1"
+  case "$value" in *[!0-9]*|'') return 1;; esac
+  [ "$value" -gt 0 ]
 }
 SLOT_WAIT_TIMEOUT="${DEEP_REVIEW_SLOT_WAIT_TIMEOUT_SECONDS:-120}"
 SLOT_STATUS_INTERVAL="${DEEP_REVIEW_SLOT_STATUS_INTERVAL_SECONDS:-5}"
@@ -176,7 +180,7 @@ positive_integer "$PROVIDER_TIMEOUT" || { echo "DEEP_REVIEW_PROVIDER_TIMEOUT_SEC
 positive_integer "$TERMINATION_GRACE" || { echo "DEEP_REVIEW_PROVIDER_TERMINATION_GRACE_SECONDS must be positive." >&2; exit 2; }
 
 process_identity() {
-  pid="$1"
+  local pid="$1"
   case "$pid" in *[!0-9]*|'') return 1;; esac
   if [ -r "/proc/$pid/stat" ]; then
     awk '{print $22}' "/proc/$pid/stat" 2>/dev/null && return 0
@@ -196,7 +200,8 @@ release_global_slot() {
   slot_claim=""
 }
 slot_is_stale() {
-  slot="$1"
+  local slot="$1"
+  local slot_pid slot_boot slot_identity current_identity
   [ -s "$slot" ] || return 0
   slot_pid="$(sed -n '1p' "$slot" 2>/dev/null || true)"
   slot_boot="$(sed -n '2p' "$slot" 2>/dev/null || true)"
@@ -211,8 +216,9 @@ slot_is_stale() {
   return 1
 }
 acquire_global_slot() {
-  slot_root="${DEEP_REVIEW_GLOBAL_SLOT_DIR:?}"
-  slot_max="${DEEP_REVIEW_GLOBAL_SLOT_MAX:-1}"
+  local slot_root="${DEEP_REVIEW_GLOBAL_SLOT_DIR:?}"
+  local slot_max="${DEEP_REVIEW_GLOBAL_SLOT_MAX:-1}"
+  local self_identity started next_status i slot loop_now elapsed
   mkdir -p "$slot_root"
   self_identity="$(process_identity "$$" 2>/dev/null || true)"
   slot_claim="$slot_root/.claim.$$"
@@ -237,26 +243,27 @@ acquire_global_slot() {
       fi
       i=$((i + 1))
     done
-    now="$(date +%s)"
-    elapsed=$((now - started))
+    loop_now="$(date +%s)"
+    elapsed=$((loop_now - started))
     if [ "$elapsed" -ge "$SLOT_WAIT_TIMEOUT" ]; then
       write_state timed_out "phase=queue waited=${elapsed}s slots=$slot_max"
       log_state timed_out "provider slot unavailable after ${elapsed}s"
       release_global_slot
       return 75
     fi
-    if [ "$now" -ge "$next_status" ]; then
+    if [ "$loop_now" -ge "$next_status" ]; then
+      next_status=$((loop_now + SLOT_STATUS_INTERVAL))
       write_state queued "waited=${elapsed}s slots=$slot_max"
       [ "$elapsed" -eq 0 ] || log_state queued "waited=${elapsed}s; slots=$slot_max"
-      next_status=$((now + SLOT_STATUS_INTERVAL))
     fi
     sleep 0.2
   done
 }
 
 signal_process_tree() {
-  signal="$1"
-  root_pid="$2"
+  local signal="$1"
+  local root_pid="$2"
+  local children child
   children="$(ps -eo pid=,ppid= 2>/dev/null | awk -v parent="$root_pid" '$2 == parent { print $1 }')"
   for child in $children; do
     signal_process_tree "$signal" "$child"
@@ -270,7 +277,7 @@ shutdown_requested=0
 shutdown_signal=""
 timed_out=0
 forward_provider_signal() {
-  signal="$1"
+  local signal="$1"
   shutdown_requested=1
   shutdown_signal="$signal"
   if [ -n "$provider_pid" ]; then
@@ -318,8 +325,8 @@ while :; do
   if [ "$shutdown_requested" -eq 1 ]; then
     grace_started="$(date +%s)"
     while kill -0 "$provider_pid" 2>/dev/null; do
-      now="$(date +%s)"
-      if [ $((now - grace_started)) -ge "$TERMINATION_GRACE" ]; then
+      termination_now="$(date +%s)"
+      if [ $((termination_now - grace_started)) -ge "$TERMINATION_GRACE" ]; then
         log_state terminating "provider ignored ${shutdown_signal:-TERM}; sending KILL"
         signal_process_tree KILL "$provider_pid"
         break
@@ -341,8 +348,9 @@ provider_finished="$(date +%s)"
 runtime=$((provider_finished - provider_started))
 
 checkpoint_file_atomic() {
-  source_file="$1"
-  destination="$2"
+  local source_file="$1"
+  local destination="$2"
+  local tmp
   mkdir -p "$(dirname "$destination")"
   tmp="$destination.tmp.$$"
   if ! cp "$source_file" "$tmp" || ! mv "$tmp" "$destination"; then
@@ -358,11 +366,11 @@ if [ "$status" -eq 0 ] && [ "$stage" = score-batch ]; then
     score_file="$work_dir/findings/score-$n.txt"
     [ -s "$score_file" ] || complete=0
   done
-  [ "$complete" -eq 1 ] || exit 1
+  [ "$complete" -eq 1 ] || { write_state failed "runtime=${runtime}s incomplete-score-batch"; exit 1; }
 
   for n in $batch_findings; do
     score_file="$work_dir/findings/score-$n.txt"
-    checkpoint_file_atomic "$score_file" "$run_dir/checkpoints/data/findings/score-$n.txt" || exit 1
+    checkpoint_file_atomic "$score_file" "$run_dir/checkpoints/data/findings/score-$n.txt" || { write_state failed "runtime=${runtime}s checkpoint-write"; exit 1; }
   done
   printf 'complete\n' >"$target"
 fi
@@ -379,17 +387,17 @@ if [ "$status" -eq 0 ] && [ -n "$target" ] && [ -s "$target" ]; then
         [ -s "$finding" ] || complete=0
         n=$((n + 1))
       done
-      [ "$complete" -eq 1 ] || exit "$status"
+      [ "$complete" -eq 1 ] || { write_state failed "runtime=${runtime}s incomplete-extraction"; exit 1; }
       n=1
       while [ "$n" -le "$count" ]; do
         finding="$work_dir/findings/finding-$n.md"
-        checkpoint_file_atomic "$finding" "$run_dir/checkpoints/data/findings/finding-$n.md" || exit 1
+        checkpoint_file_atomic "$finding" "$run_dir/checkpoints/data/findings/finding-$n.md" || { write_state failed "runtime=${runtime}s checkpoint-write"; exit 1; }
         n=$((n + 1))
       done
     fi
   fi
   mkdir -p "$(dirname "$checkpoint")" "$(dirname "$marker")"
-  checkpoint_file_atomic "$target" "$checkpoint" || exit 1
+  checkpoint_file_atomic "$target" "$checkpoint" || { write_state failed "runtime=${runtime}s checkpoint-write"; exit 1; }
   marker_tmp="$marker.tmp.$$"
   printf 'complete\n' >"$marker_tmp"
   mv "$marker_tmp" "$marker"
