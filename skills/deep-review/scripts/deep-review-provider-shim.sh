@@ -205,7 +205,6 @@ slot_is_stale() {
   case "$slot_pid" in *[!0-9]*|'') return 0;; esac
   kill -0 "$slot_pid" 2>/dev/null || return 0
   current_identity="$(process_identity "$slot_pid" 2>/dev/null || true)"
-  # Old two-line slots remain valid only when we cannot obtain a stronger identity.
   if [ -n "$slot_identity" ] && [ -n "$current_identity" ] && [ "$slot_identity" != "$current_identity" ]; then
     return 0
   fi
@@ -255,6 +254,16 @@ acquire_global_slot() {
   done
 }
 
+signal_process_tree() {
+  signal="$1"
+  root_pid="$2"
+  children="$(ps -eo pid=,ppid= 2>/dev/null | awk -v parent="$root_pid" '$2 == parent { print $1 }')"
+  for child in $children; do
+    signal_process_tree "$signal" "$child"
+  done
+  kill -"$signal" "$root_pid" 2>/dev/null || true
+}
+
 provider_pid=""
 watchdog_pid=""
 shutdown_requested=0
@@ -265,7 +274,7 @@ forward_provider_signal() {
   shutdown_requested=1
   shutdown_signal="$signal"
   if [ -n "$provider_pid" ]; then
-    kill -"$signal" "$provider_pid" 2>/dev/null || true
+    signal_process_tree "$signal" "$provider_pid"
   else
     write_state cancelled "phase=queue signal=$signal"
     release_global_slot
@@ -278,18 +287,19 @@ timeout_provider() {
   shutdown_signal=TERM
   write_state timed_out "phase=running timeout=${PROVIDER_TIMEOUT}s"
   log_state timed_out "provider exceeded ${PROVIDER_TIMEOUT}s; terminating"
-  [ -z "$provider_pid" ] || kill -TERM "$provider_pid" 2>/dev/null || true
+  [ -z "$provider_pid" ] || signal_process_tree TERM "$provider_pid"
 }
 trap 'forward_provider_signal TERM' TERM
 trap 'forward_provider_signal INT' INT
 trap 'forward_provider_signal HUP' HUP
 trap 'timeout_provider' USR1
 
-if ! acquire_global_slot; then
-  exit $?
-fi
+acquire_global_slot
+slot_status=$?
+[ "$slot_status" -eq 0 ] || exit "$slot_status"
 write_state running "slot=$(basename "$slot_owned") timeout=${PROVIDER_TIMEOUT}s"
 log_state running "slot=$(basename "$slot_owned")"
+provider_started="$(date +%s)"
 "$real" "$@" &
 provider_pid=$!
 (
@@ -305,15 +315,13 @@ while :; do
   if ! kill -0 "$provider_pid" 2>/dev/null; then
     break
   fi
-  # wait can be interrupted by one of our traps while the provider is still alive.
-  # Never release the provider slot until that process is actually gone.
   if [ "$shutdown_requested" -eq 1 ]; then
     grace_started="$(date +%s)"
     while kill -0 "$provider_pid" 2>/dev/null; do
       now="$(date +%s)"
       if [ $((now - grace_started)) -ge "$TERMINATION_GRACE" ]; then
         log_state terminating "provider ignored ${shutdown_signal:-TERM}; sending KILL"
-        kill -KILL "$provider_pid" 2>/dev/null || true
+        signal_process_tree KILL "$provider_pid"
         break
       fi
       sleep 0.2
@@ -329,6 +337,8 @@ provider_pid=""
 watchdog_pid=""
 release_global_slot
 trap - TERM INT HUP USR1
+provider_finished="$(date +%s)"
+runtime=$((provider_finished - provider_started))
 
 checkpoint_file_atomic() {
   source_file="$1"
@@ -386,14 +396,14 @@ if [ "$status" -eq 0 ] && [ -n "$target" ] && [ -s "$target" ]; then
 fi
 
 if [ "$status" -eq 0 ]; then
-  write_state completed
-  log_state completed
+  write_state completed "runtime=${runtime}s"
+  log_state completed "runtime=${runtime}s"
 elif [ "$status" -eq 124 ] || [ "$timed_out" -eq 1 ]; then
-  write_state timed_out "phase=running exit=$status"
+  write_state timed_out "phase=running runtime=${runtime}s exit=$status"
 elif [ "$status" -eq 143 ] && [ "$shutdown_requested" -eq 1 ]; then
-  write_state cancelled "signal=${shutdown_signal:-TERM}"
+  write_state cancelled "signal=${shutdown_signal:-TERM} runtime=${runtime}s"
 else
-  write_state failed "exit=$status"
-  log_state failed "exit=$status"
+  write_state failed "runtime=${runtime}s exit=$status"
+  log_state failed "runtime=${runtime}s exit=$status"
 fi
 exit "$status"
