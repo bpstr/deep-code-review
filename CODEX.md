@@ -59,7 +59,22 @@ Exact aspect and reviewer IDs can still be requested explicitly.
 
 ## Models
 
-By default, child Codex review sessions use your configured Codex model. Advanced users can override the review and scoring models through the bundled runner's `--model` and `--fast-model` options or `REVIEW_MODEL` and `REVIEW_FAST_MODEL` environment variables.
+By default, child Codex review sessions use your configured Codex model. Advanced users can override the review and scoring models through the bundled runner's `--model` and `--fast-model` options or the `REVIEW_MODEL` and `DEEP_REVIEW_FAST_MODEL` environment variables.
+
+`DEEP_REVIEW_FAST_MODEL` is the environment variable used for stack profiling, finding extraction, and confidence scoring. Prefer setting it to a genuinely faster/cheaper model when your provider supports one. The older documentation name `REVIEW_FAST_MODEL` was incorrect and is not used by the runner.
+
+## Worker lifecycle and timeouts
+
+Provider workers now expose explicit `queued`, `running`, `completed`, `failed`, `cancelled`, and `timed_out` lifecycle states in the saved run artifacts. A process reported as queued has not started a provider session yet.
+
+Machine-wide provider slots are bounded rather than waiting forever. Stale slot ownership is validated with PID, boot identity, and process-start identity where the platform exposes it. Useful controls:
+
+- `DEEP_REVIEW_SLOT_WAIT_TIMEOUT_SECONDS` — maximum time to wait for a provider slot (default: 120).
+- `DEEP_REVIEW_SLOT_STATUS_INTERVAL_SECONDS` — queued progress-report interval (default: 5).
+- `DEEP_REVIEW_PROVIDER_TIMEOUT_SECONDS` — maximum provider execution time for one stage (default: 1800).
+- `DEEP_REVIEW_PROVIDER_TERMINATION_GRACE_SECONDS` — graceful shutdown period before forced termination (default: 10).
+
+On cancellation or timeout, the runner keeps the provider slot until the provider process tree has actually terminated. If graceful termination is ignored, the worker escalates to a forced kill before releasing capacity.
 
 ## Safety model
 
