@@ -8,6 +8,7 @@ bash -n skills/deep-review/scripts/deep-review-provider-shim.sh
 bash -n skills/deep-review/scripts/deep-review-mktemp-shim.sh
 bash -n scripts/test-deep-review-recovery.sh
 bash -n scripts/test-deep-review-efficiency.sh
+bash -n scripts/test-provider-lifecycle.sh
 
 output="$(bash skills/deep-review/scripts/deep-review.sh --help)"
 grep -q -- '--provider codex|claude|auto' <<<"$output"
@@ -36,6 +37,7 @@ grep -q 'a11y) echo accessibility-scanner' skills/deep-review/scripts/deep-revie
 grep -q 'run_provider_background' skills/deep-review/scripts/deep-review-engine.sh
 grep -q 'confidence scorer for a batch' skills/deep-review/scripts/deep-review-engine.sh
 
+bash scripts/test-provider-lifecycle.sh
 bash scripts/test-deep-review-recovery.sh
 bash scripts/test-deep-review-efficiency.sh
 
