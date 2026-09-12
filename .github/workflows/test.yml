@@ -28,9 +28,17 @@ jobs:
           bash -n scripts/test-deep-review-efficiency.sh
           bash -n scripts/test-provider-lifecycle.sh
 
-      - name: Provider lifecycle tests
+      - name: Queue timeout lifecycle test
         shell: bash
-        run: bash -x scripts/test-provider-lifecycle.sh
+        run: bash -x scripts/test-provider-lifecycle.sh queue
+
+      - name: Cancellation lifecycle test
+        shell: bash
+        run: bash -x scripts/test-provider-lifecycle.sh cancel
+
+      - name: Execution timeout lifecycle test
+        shell: bash
+        run: bash -x scripts/test-provider-lifecycle.sh timeout
 
       - name: Recovery and resource tests
         shell: bash
