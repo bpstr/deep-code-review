@@ -1,0 +1,1 @@
+Business contract: reporting a successful transfer means both accounts have been updated atomically. The queue is at-least-once and may fail permanently; no reconciliation process exists. Both accounts are in the same database and can be updated in a transaction.

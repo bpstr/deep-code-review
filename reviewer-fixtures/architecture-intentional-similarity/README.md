@@ -1,0 +1,1 @@
+Billing rebates and Shipping credits are independent policies with different owners and release schedules. They happen to share a threshold today. There is no shared eligibility contract. Keep their policies independently changeable.

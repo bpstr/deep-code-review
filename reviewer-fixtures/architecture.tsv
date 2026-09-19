@@ -1,0 +1,9 @@
+name	expectation	pattern	priority	description
+architecture-policy-duplication	present	duplicat|same.*policy|shared.*policy	P2	Confirmed maintenance duplication survives normal confidence filtering.
+architecture-intentional-similarity	absent	must consolidate|should consolidate|extract a shared.*(eligibility|policy)|DRY violation	-	Independent policies should not be forcibly unified.
+architecture-forbidden-layer	present	domain.*transport|transport.*domain|Flask|request.*context|boundary|layer	-	Domain depends on transport despite the offline requirement.
+architecture-valid-inversion	absent	unnecessary.*(protocol|interface)|remove.*(protocol|interface)|interface.*smell	-	Useful dependency inversion must be retained.
+architecture-stable-foundation	absent	god.module|god.object|excessive.*fan.in|split.*currency	-	Stable cohesive foundation is not a god module.
+architecture-runtime-cycle	present	circular|cycle|partially initialized	-	Startup dependency cycle must be found.
+architecture-atomicity	present	atomic|transaction|partial.*transfer|lost.*credit	-	Decision contradicts an explicit atomic-success contract.
+architecture-valid-dto	absent	anemic|anaemic|move.*validation.*(DTO|PersonPayload)|must.*(behavior|behaviour)	-	Functional validation and DTOs are legitimate.

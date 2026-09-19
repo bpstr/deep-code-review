@@ -167,3 +167,30 @@ Persistent state and exported reports can contain proprietary source references 
 ## Output
 
 Present the final P0/P1/P2 report produced by the runner to the user and mention the saved result path when it is available. Mention review gaps if any specialist or shared stack profiling failed. Do not automatically fix findings unless the user explicitly asks for fixes.
+
+## Architecture and antipattern reviews
+
+Map architecture, harmful duplication, duplicated policy, unnecessary abstraction,
+and architectural decision-fit requests to `arch`. Use `.` scope only for a
+requested repository-wide audit; otherwise preserve the user's branch/path scope.
+For details read the bundled [architecture guide](support/architecture-guide.md).
+
+`arch` runs dependency-mapper, cycle-detector, hotspot-analyzer, pattern-scout,
+scale-assessor, code-simplifier and type-design-analyzer, with one combined fast
+stack/architecture-context pass. Explicit `arch` profiles even when automatic
+specialist detection is disabled. Historical `core` and exact compatibility
+`full` keep their reviewer sets and call shape; overlapping aspects are deduplicated.
+
+Apply [architecture-review.md](support/architecture-review.md) to architectural
+findings. Require source evidence, relevant constraints, counterevidence, impact,
+a small compatible correction, trade-offs and validation. Do not flag file size,
+fan-in, DTOs or valid dependency inversion by label alone. Confirmed maintainability
+debt can have high confidence while remaining P2; do not invent a runtime incident.
+
+Scanners are optional. Never infer permission to execute project tools from a
+generic review request. Only with explicit consent to trust repository executables
+and configuration, pass `--architecture-tools`; execution is not sandboxed and no
+packages are installed. Alternatively import user-provided JSON reports using
+`--architecture-evidence=/absolute/report-directory`, which does not execute tools.
+Do not run or retry scanners outside the runner. Report missing tools, timeouts,
+unsupported output, exclusions and unverified imported freshness as coverage limits.
