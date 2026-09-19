@@ -26,8 +26,14 @@ jobs:
           bash -n scripts/test-architecture-fixtures.sh
           bash scripts/test-architecture-fixtures.sh
           bash scripts/test-reviewer-fixtures.sh
-          bash scripts/test-reviewer-knowledge.sh
-          bash scripts/test-plugin-packaging.sh
+      - name: Existing reviewer knowledge smoke checks
+        shell: bash
+        run: bash -x scripts/test-reviewer-knowledge.sh
+      - name: Plugin packaging
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash -x scripts/test-plugin-packaging.sh
       - name: Scanner and pipeline regressions (fake providers only)
+        if: ${{ !cancelled() }}
         shell: bash
         run: python3 -m unittest discover -s scripts -p 'test_architecture_*.py' -v
