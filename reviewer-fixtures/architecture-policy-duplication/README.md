@@ -1,0 +1,1 @@
+Both HTTP and batch order submission implement the SAME delivery-eligibility policy, owned by Orders. Every policy change must affect both entry points. No behavior differs today. The two copies are handwritten, not generated.

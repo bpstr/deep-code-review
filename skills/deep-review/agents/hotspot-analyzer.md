@@ -1,77 +1,28 @@
 # Hotspot Analyzer Agent
 
-Identify coupling hotspots - modules or files that are overly connected.
+Identify responsibility and coupling hotspots using impact, not size thresholds.
 
 {SCOPE_CONTEXT}
 
-## Analysis Focus
+Read and apply `../support/architecture-review.md` relative to this agent file.
+Its evidence, scope, calibration and severity rules take precedence.
 
-1. **Assess fan-in and fan-out per module**:
-   - Fan-in: How many other modules import/depend on this one?
-   - Fan-out: How many other modules does this one import/depend on?
+## Analysis focus
 
-2. **Look for "god modules"** that everything depends on:
-   - Utilities that have grown too large
-   - Core modules with too many responsibilities
-   - Shared state that creates implicit coupling
+Inspect fan-in/fan-out, shared mutable state, base classes and widely used types.
+Use measured counts only when a tool or enumerated imports establishes them;
+otherwise label the observation qualitative. Compare related modules, not arbitrary
+universal limits. File length is a signal, never a reason alone to split a file.
+For a god-module finding identify distinct responsibilities/reasons to change and
+the consumers harmed by their coupling. A cohesive parser or stable shared value
+type is not a defect merely because it is large or widely referenced. Do not
+invent merge conflicts or churn. Recommend a boundary that reduces actual
+coupling rather than moving code into more files without changing dependencies.
 
-3. **Identify large files** (>500-1000 lines):
-   - Files that do too much
-   - Files that should be split
-   - Files that are hard to understand
+## Output
 
-4. **Check for types/protocols creating implicit coupling**:
-   - Interfaces used everywhere
-   - Base classes with many subclasses
-   - Shared types that tie modules together
-
-## Issue Severity Classification
-
-- **CRITICAL**: God modules that are single points of failure (extreme fan-in with fragile internals), files so large they cause persistent merge conflicts across teams, implicit coupling via shared mutable state that creates race conditions
-- **HIGH**: Modules with fan-in/fan-out significantly above codebase average, files over 1000 lines with multiple responsibilities, base classes/interfaces with many dependents that are difficult to change safely
-- **MEDIUM**: Modules with moderately elevated fan-in/fan-out, files in the 500-1000 line range that could benefit from splitting, types creating implicit coupling across module boundaries
-- **LOW**: Slightly above-average fan-in/fan-out, files approaching size thresholds, optional restructuring for cleaner module boundaries
-
-## Output Format
-
-```markdown
-### Hotspot Analysis
-
-#### High Fan-in Modules (depended on by many)
-| Module | Fan-in Count | Classification | Severity |
-|--------|--------------|----------------|----------|
-| ... | ... | [NEW]/[PRE-EXISTING] | CRITICAL/HIGH/MEDIUM/LOW |
-
-**Analysis**: {why these are concerning and what to do}
-
-#### High Fan-out Modules (depends on many)
-| Module | Fan-out Count | Classification | Severity |
-|--------|---------------|----------------|----------|
-| ... | ... | [NEW]/[PRE-EXISTING] | CRITICAL/HIGH/MEDIUM/LOW |
-
-**Analysis**: {why these are concerning and what to do}
-
-#### Large Files
-| File | Lines | Classification | Severity |
-|------|-------|----------------|----------|
-| ... | ... | [NEW]/[PRE-EXISTING] | CRITICAL/HIGH/MEDIUM/LOW |
-
-**Split Recommendations**: {how to break up large files}
-
-#### Implicit Coupling via Types
-- {types/interfaces creating hidden dependencies, classified as [NEW] or [PRE-EXISTING]}
-
-#### Top 3 Hotspots to Address
-1. {most critical hotspot and why}
-2. {second priority}
-3. {third priority}
-
-#### Recommendations
-**[NEW] issues (introduced by this PR)**:
-- {hotspots introduced or worsened by this PR}
-
-**[PRE-EXISTING] issues (in scope — fix before merge)**:
-- {existing hotspots within the PR's scope}
-```
-
-READ-ONLY analysis - do not modify any files.
+For each finding provide Classification, Location (all relevant file:line ranges),
+Severity, Category, Evidence, Impact, Recommendation, Trade-off and Validation.
+Group [NEW] before [PRE-EXISTING], ordered by impact. State inspected boundaries
+and coverage gaps; do not equate missing scanner data with a clean result.
+READ-ONLY analysis; write only the runner-provided report.

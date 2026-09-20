@@ -93,6 +93,9 @@ def report(args, status, summary, findings):
     threshold = {"none": -1, "p0": 0, "p1": 1, "p2": 2}[args.fail_on]
     blockers = [item["id"] for item in findings if item["included"] and
                 item["classification"] == "NEW" and int(item["priority"][1]) <= threshold]
+    gaps_file = args.directory / "architecture-evidence.gaps.txt"
+    coverage_notes = ([line for line in read_text(gaps_file).splitlines() if line.strip()]
+                      if gaps_file.is_file() and gaps_file.stat().st_size else [])
     data = {
         "schema_version": 1,
         "status": status,
@@ -102,6 +105,7 @@ def report(args, status, summary, findings):
         "head": args.head or None,
         "confidence_threshold": args.confidence,
         "summary": summary,
+        "coverage_notes": coverage_notes,
         "findings": findings,
         "gate": {"fail_on": args.fail_on, "classification": "NEW", "finding_ids": blockers,
                  "passed": status != "error" and not blockers},
@@ -122,6 +126,10 @@ def report(args, status, summary, findings):
     if findings:
         markdown.extend(["Reviewed %d extracted findings; %d were excluded by confidence or triage." %
                          (len(findings), len(findings) - len(included)), ""])
+    if coverage_notes:
+        markdown.extend(["## Scanner coverage notes", ""])
+        markdown.extend("- " + note for note in coverage_notes)
+        markdown.append("")
     gate_result = "failed: review incomplete" if status == "error" else (
         "failed on finding IDs " + ", ".join(map(str, blockers)) if blockers else "passed")
     markdown.extend(["Gate: **%s**. Policy: `%s`, NEW findings only, confidence ≥ %d." %

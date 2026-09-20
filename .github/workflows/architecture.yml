@@ -1,0 +1,39 @@
+name: Architecture review contracts
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  architecture:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Shell syntax and fixture metadata (no models)
+        shell: bash
+        run: |
+          bash -n skills/deep-review/scripts/deep-review-engine.sh
+          bash -n skills/deep-review/scripts/review-cache.sh
+          bash -n scripts/test-architecture-fixtures.sh
+          bash scripts/test-architecture-fixtures.sh
+          bash scripts/test-reviewer-fixtures.sh
+      - name: Existing reviewer knowledge smoke checks
+        shell: bash
+        run: bash -x scripts/test-reviewer-knowledge.sh
+      - name: Plugin packaging
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash -x scripts/test-plugin-packaging.sh
+      - name: Scanner and pipeline regressions (fake providers only)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: python3 -m unittest discover -s scripts -p 'test_architecture_*.py' -v

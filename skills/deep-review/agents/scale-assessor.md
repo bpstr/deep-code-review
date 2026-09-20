@@ -1,83 +1,30 @@
 # Scale Assessor Agent
 
-Identify scalability risks - things that become problems as the codebase grows.
+Assess change cost and structural growth against actual needs.
 
 {SCOPE_CONTEXT}
 
-## Analysis Focus
+Read and apply `../support/architecture-review.md` relative to this agent file.
+Its evidence, scope, calibration and severity rules take precedence.
 
-1. **Ease of adding new modules**:
-   - How many files need to be touched to add a new feature module?
-   - Is there boilerplate that must be copied?
-   - Are there registration steps that are easy to forget?
+## Analysis focus
 
-2. **Manual steps in multiple places**:
-   - Configuration that must be updated in several files
-   - Lists that must be kept in sync
-   - Build configuration that grows with modules
+Walk a representative feature/policy change through registration, configuration,
+implementation, tests and deployment. Identify manually synchronized sources of
+truth, duplicated registration, unclear ownership and avoidable coordination.
+Name the exact edit points and failure/cost of keeping them synchronized. Generated
+registration and deliberate declarative tables are not manual duplication.
+Do not infer growth trajectories, team conflicts, traffic or future requirements
+from file size. More than five edits is not an automatic high-severity finding.
+Check overengineering as well as underengineering: extra services, queues, generic
+frameworks or caches may impose operational/change cost without a demonstrated
+need. Never require microservices, event sourcing, CQRS, sharding or a rewrite
+merely for future scale. Prefer the simplest design satisfying declared constraints.
 
-3. **Module boundary clarity**:
-   - Can a new developer understand where to put new code?
-   - Are module responsibilities clear?
-   - Is there guidance for module organization?
+## Output
 
-4. **Modules growing too large**:
-   - Modules that keep accumulating code
-   - "Misc" or "Utils" modules that are dumping grounds
-   - Feature modules that have become monoliths
-
-5. **Large files becoming maintenance burdens**:
-   - Files that are hard to navigate
-   - Files with too many responsibilities
-   - Files that multiple people frequently conflict on
-
-## Issue Severity Classification
-
-- **CRITICAL**: Scalability bottlenecks that will cause failures at current growth trajectory (e.g., manual sync points that are already being missed, modules so large they block parallel development)
-- **HIGH**: Significant scaling risks that will become painful within the next few development cycles, unclear module boundaries causing frequent misplacement of code, adding new modules requires touching 5+ files
-- **MEDIUM**: Moderate scaling concerns (growing modules, accumulating boilerplate), manual steps that are manageable now but will become error-prone, somewhat unclear boundaries
-- **LOW**: Minor scalability improvements, optional restructuring for future growth, cosmetic organization enhancements
-
-## Output Format
-
-```markdown
-### Scalability Assessment
-
-#### Current Strengths
-- {what scales well in this codebase}
-
-#### Adding New Modules
-- **Difficulty**: Easy/Medium/Hard
-- **Steps required**: {list of steps}
-- **Pain points**: {what makes it hard}
-
-#### Manual Synchronization Points
-| What | Where | Classification | Severity |
-|------|-------|----------------|----------|
-| ... | ... | [NEW]/[PRE-EXISTING] | CRITICAL/HIGH/MEDIUM/LOW |
-
-#### Module Boundary Clarity
-- **Rating**: Clear/Somewhat Clear/Unclear
-- **Issues**: {specific clarity problems}
-
-#### Growth Concerns
-| Area | Current Size | Trajectory | Classification | Severity |
-|------|--------------|------------|----------------|----------|
-| ... | ... | Growing/Stable | [NEW]/[PRE-EXISTING] | CRITICAL/HIGH/MEDIUM/LOW |
-
-#### Top 5 Scalability Risks (by severity)
-1. {CRITICAL risk and why}
-2. {HIGH risk}
-3. {HIGH risk}
-4. {MEDIUM risk}
-5. {MEDIUM risk}
-
-#### Recommendations
-**[NEW] issues (introduced by this PR)**:
-- {scalability risks introduced by this PR}
-
-**[PRE-EXISTING] issues (in scope — fix before merge)**:
-- {existing scalability concerns within the PR's scope}
-```
-
-READ-ONLY analysis - do not modify any files.
+For each finding provide Classification, Location (all relevant file:line ranges),
+Severity, Category, Evidence, Impact, Recommendation, Trade-off and Validation.
+Group [NEW] before [PRE-EXISTING], ordered by impact. State inspected boundaries
+and coverage gaps; do not equate missing scanner data with a clean result.
+READ-ONLY analysis; write only the runner-provided report.

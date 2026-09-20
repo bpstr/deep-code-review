@@ -1,0 +1,1 @@
+Consumer-local structural protocol isolates policy from delivery adapters. The domain owns the protocol; the adapter is composed at the application boundary. This intentionally breaks the old dependency cycle.

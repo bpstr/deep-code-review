@@ -19,6 +19,7 @@ from pathlib import Path
 prompt = sys.argv[sys.argv.index("-p") + 1] if "-p" in sys.argv else sys.argv[-1]
 root = Path(os.environ["DEEP_REVIEW_ACTIVE_WORK_DIR"])
 scenario = os.environ.get("FAKE_SCENARIO", "standard")
+architecture = os.environ.get("FAKE_ARCH") == "1"
 if "stack profiling instructions" in prompt:
     stage, target = "profile", root / "stack-context.md"
 elif "specialized READ-ONLY" in prompt:
@@ -34,6 +35,16 @@ elif "final code-review triage editor" in prompt:
     stage, target = "final", root / "triage.json"
 else:
     raise RuntimeError("Unrecognized provider prompt")
+if architecture:
+    required = {
+        "profile": ("architecture-context.md", "CI completion contract"),
+        "reviewer": ("architecture-review.md", "architecture-evidence.json", "CI completion contract"),
+        "synthesis": ("confirmed maintainability improvements", "trade-offs and validation", "CI completion contract"),
+        "extract": ("strict JSON only", "trade-off and validation", "maintainability", "introduction time unknown"),
+        "scores": ("finding-validation.md", "independent of severity", "without immediate runtime failure"),
+        "final": ("strict JSON only", "Do not promote P2 debt", "Preserve evidence and trade-offs"),
+    }
+    assert all(text in prompt for text in required[stage]), (stage, prompt)
 with open(os.environ["FAKE_CALLS"], "a") as log:
     log.write(stage + "\n")
 if scenario == "missing-" + stage:
@@ -46,6 +57,17 @@ findings = [{"id": index, "title": title, "classification": classification,
                 (3, "Unconfirmed blocker", "NEW"), (4, "Useful improvement", "NEW"))]
 if scenario == "empty":
     findings = []
+elif architecture:
+    findings = [
+        {"id": 1, "title": "Shared policy duplication", "classification": "NEW", "severity": "medium",
+         "source": "code-simplifier; pattern-scout", "location": "app.txt:1; policy.txt:1",
+         "details": "Evidence: the same policy appears in both locations. Impact: changes require two edits. "
+                    "Constraint: retain domain ownership. Counterevidence: both callers share one policy. "
+                    "Trade-off: one shared helper adds coupling. Validation: exercise both callers."},
+        {"id": 2, "title": "Fan-in alone", "classification": "NEW", "severity": "low",
+         "source": "hotspot-analyzer", "location": "policy.txt:1",
+         "details": "A structural metric without demonstrated impact."},
+    ]
 if stage in ("profile", "reviewer", "synthesis"):
     status = "ERROR" if scenario == "partial-" + stage else "COMPLETE"
     target.write_text("REVIEW_STATUS: " + status + "\n# Findings\nConcrete review evidence.\n")
@@ -67,6 +89,8 @@ elif stage == "scores":
         if scenario == "missing-one-score" and index == 1:
             continue
         score = {1: 95, 2: 99, 3: 79, 4: 90}[index]
+        if architecture and index == 2:
+            score = 5
         if scenario == "boundary" and index == 3:
             score = 80
         output = "SCORE: %d\nREASON: Independently validated against the code.\n" % score
@@ -77,6 +101,11 @@ elif stage == "final":
     triage = [{"id": finding["id"], "priority": {1: "P1", 2: "P0", 3: "P0", 4: "P2"}[finding["id"]],
                "rationale": "Concrete risk confirmed from source.", "fix": "Check input before processing."}
               for finding in findings]
+    if architecture:
+        for item in triage:
+            item["priority"] = "P2" if item["id"] == 1 else None
+            item["rationale"] = "Confirmed maintenance consequence without an immediate runtime failure."
+            item["fix"] = "Consolidate policy within its existing domain; validate both callers."
     if scenario == "invented-id":
         triage[0]["id"] = 999
     elif scenario == "duplicate-id":
@@ -200,6 +229,45 @@ done
 
 # Explicit environment provider/base are supported, including base refs that name paths.
 DEEP_REVIEW_PROVIDER=codex REVIEW_BASE=main run_case 0 empty --ci code
+
+# PR #9 architecture contracts must survive the strict CI prompt overrides and renderer.
+export FAKE_ARCH=1
+run_case 0 standard --ci --provider codex --base main --fail-on p1 --no-auto-specialists arch
+[ "$(grep -c '^profile$' "$FAKE_CALLS")" -eq 1 ]
+[ "$(grep -c '^reviewer$' "$FAKE_CALLS")" -eq 7 ]
+python3 - "$case_dir/export/review.json" "$case_dir/export/review.md" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+finding, noise = data["findings"]
+assert finding["priority"] == "P2" and finding["confidence"] == 95 and finding["included"]
+assert finding["location"] == "app.txt:1; policy.txt:1"
+assert all(label in finding["details"] for label in ("Evidence:", "Impact:", "Constraint:", "Counterevidence:", "Trade-off:", "Validation:"))
+assert not noise["included"] and noise["confidence"] == 5
+assert data["gate"]["passed"] and data["coverage_notes"] == []
+assert "a structural metric" not in open(sys.argv[2]).read().lower()
+PY
+run_case 3 standard --ci --provider codex --base main --fail-on p2 arch
+run_case 1 fail-profile --ci --provider codex --base main arch
+run_case 1 partial-synthesis --ci --provider codex --base main arch
+run_case 1 fail-scores --ci --provider codex --base main arch
+
+mkdir "$test_dir/imports with spaces"
+printf '{"duplicates": []}\n' >"$test_dir/imports with spaces/jscpd-report.json"
+run_case 0 standard --ci --provider codex --base main --architecture-evidence="$test_dir/imports with spaces" arch
+python3 - "$case_dir/export/review.json" "$case_dir/export/review.md" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+assert any("unverified freshness" in note for note in data["coverage_notes"])
+assert "unverified freshness" in open(sys.argv[2]).read()
+PY
+run_case 1 fail-reviewer --ci --provider codex --base main --architecture-evidence="$test_dir/imports with spaces" arch
+python3 - "$case_dir/export/review.json" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+assert data["status"] == "error"
+assert any("unverified freshness" in note for note in data["coverage_notes"])
+PY
+unset FAKE_ARCH
 
 # No-change jobs do not need a provider installed, even with an explicit provider.
 mkdir "$test_dir/no-provider-bin"

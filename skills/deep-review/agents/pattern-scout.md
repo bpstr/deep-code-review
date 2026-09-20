@@ -1,75 +1,31 @@
 # Pattern Scout Agent
 
-Analyze for pattern consistency across modules in this codebase.
+Assess architectural decision fit as well as consistency across modules.
 
 {SCOPE_CONTEXT}
 
-## Analysis Focus
+Read and apply `../support/architecture-review.md` relative to this agent file.
+Its evidence, scope, calibration and severity rules take precedence.
 
-1. **Identify established patterns**:
-   - File organization (how files are structured within modules)
-   - Naming conventions (files, classes, functions, variables)
-   - Architecture patterns (MVC, MVVM, Redux, etc.)
-   - Error handling patterns
-   - Logging patterns
-   - Testing patterns
+## Analysis focus
 
-2. **Look for deviations from patterns**:
-   - Files organized differently
-   - Naming that doesn't match conventions
-   - Different architectural approaches in different modules
-   - Inconsistent error handling
+Establish conventions from representative implementations and explicit design
+intent. Check inconsistent domain ownership, duplicated policy with behavioral
+drift, incompatible error/transaction semantics, and architectural erosion.
+Evaluate whether a decision still serves declared requirements: unnecessary
+service boundaries, duplicated sources of truth, speculative extension systems,
+coordination-heavy abstractions, or a consistency model unable to uphold a promised
+invariant. Compare with a smaller compatible alternative and name its trade-offs.
+Consistency alone does not vindicate an unsuitable architecture. Conversely,
+intentional migration adapters, framework idioms and independent bounded contexts
+may legitimately differ. Naming, directory style and fashionable design preferences
+are not findings without an evidenced consequence. Defer implementation-level
+clone consolidation to code-simplifier and invariant enforcement to type analysis.
 
-3. **Check newer vs older modules**:
-   - Do newer modules follow the same conventions?
-   - Has the style evolved/drifted over time?
-   - Are there "legacy" patterns mixed with "modern" patterns?
+## Output
 
-4. **Identify inconsistencies that cause confusion**:
-   - Same concept named differently in different places
-   - Same pattern implemented differently
-   - Documentation style inconsistencies
-
-## Issue Severity Classification
-
-- **CRITICAL**: Pattern deviations that will cause runtime errors or data corruption (e.g., using synchronous patterns where async is required), architectural inconsistencies that break core assumptions of the codebase
-- **HIGH**: Significant deviations from established conventions that will confuse developers and increase bug risk, mixing incompatible architectural patterns within the same layer, naming inconsistencies for core domain concepts
-- **MEDIUM**: Moderate deviations from established patterns, inconsistent error handling or logging approaches, style drift between newer and older modules
-- **LOW**: Minor naming inconsistencies, cosmetic pattern deviations, optional standardization opportunities
-
-## Output Format
-
-```markdown
-### Pattern Consistency Analysis
-
-#### Established Patterns
-| Pattern Type | Convention | Where Followed |
-|--------------|------------|----------------|
-| File organization | ... | ... |
-| Naming | ... | ... |
-| Architecture | ... | ... |
-| Error handling | ... | ... |
-
-#### Pattern Deviations
-| Location | Expected Pattern | Actual Pattern | Classification | Severity |
-|----------|------------------|----------------|----------------|----------|
-| ... | ... | ... | [NEW]/[PRE-EXISTING] | CRITICAL/HIGH/MEDIUM/LOW |
-
-#### Evolution/Drift
-- {observations about how patterns have changed over time}
-
-#### Confusion Points
-- {specific inconsistencies that could confuse developers}
-
-#### Standardization Recommendations
-
-**[NEW] deviations (introduced by this PR)**:
-- {pattern violations introduced by this PR}
-
-**[PRE-EXISTING] deviations (in scope — fix before merge)**:
-- {existing inconsistencies within the PR's scope}
-
-**Quick Wins**: {easy fixes that improve consistency}
-```
-
-READ-ONLY analysis - do not modify any files.
+For each finding provide Classification, Location (all relevant file:line ranges),
+Severity, Category, Evidence, Impact, Recommendation, Trade-off and Validation.
+Group [NEW] before [PRE-EXISTING], ordered by impact. State inspected boundaries
+and coverage gaps; do not equate missing scanner data with a clean result.
+READ-ONLY analysis; write only the runner-provided report.
