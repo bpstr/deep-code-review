@@ -1,0 +1,164 @@
+# Copy into the repository being reviewed. Configure DEEP_REVIEW_REF,
+# COPILOT_CLI_VERSION, and eligible Copilot billing. Setup:
+# https://github.com/bpstr/deep-code-review/blob/main/CI.md
+name: Deep review (Copilot)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deep-review-copilot-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Copilot usage is billed to the eligible repository owner or organization.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      copilot-requests: write
+    env:
+      DEEP_REVIEW_REF: ${{ vars.DEEP_REVIEW_REF }}
+      COPILOT_CLI_VERSION: ${{ vars.COPILOT_CLI_VERSION }}
+      COPILOT_AUTO_UPDATE: 'false'
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      DEEP_REVIEW_PROVIDER_TIMEOUT_SECONDS: '600'
+    steps:
+      - name: Validate configuration
+        shell: bash
+        run: |
+          if [[ ! "$DEEP_REVIEW_REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo 'Set DEEP_REVIEW_REF to a reviewed 40-character tool commit SHA.' >&2
+            exit 2
+          fi
+          if [[ ! "$COPILOT_CLI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo 'Set COPILOT_CLI_VERSION to an exact published npm version.' >&2
+            exit 2
+          fi
+          [[ "$PR_BASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]
+          [[ "$PR_HEAD_SHA" =~ ^[0-9a-fA-F]{40}$ ]]
+          python3 --version
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Install pinned Copilot CLI
+        working-directory: ${{ runner.temp }}
+        env:
+          COPILOT_HOME: ${{ runner.temp }}/deep-review-copilot-home
+        shell: bash
+        run: |
+          npm install --global "@github/copilot@$COPILOT_CLI_VERSION"
+          copilot --version
+
+      - name: Check out trusted review tool
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: bpstr/deep-code-review
+          ref: ${{ env.DEEP_REVIEW_REF }}
+          path: deep-review-tool
+          persist-credentials: false
+
+      - name: Check out reviewed PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          path: source
+          persist-credentials: false
+
+      - name: Verify review scope and tool
+        working-directory: source
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$PR_HEAD_SHA"
+          git cat-file -e "${PR_BASE_SHA}^{commit}"
+          git merge-base "$PR_BASE_SHA" HEAD >/dev/null
+          review_help="$(bash "$GITHUB_WORKSPACE/deep-review-tool/skills/deep-review/scripts/deep-review.sh" --help)"
+          if [[ "$review_help" != *'--ci'* ]]; then
+            echo 'The pinned tool does not support --ci; select a commit containing CI support.' >&2
+            exit 2
+          fi
+
+      - name: Run complete review pipeline
+        id: review
+        working-directory: source
+        timeout-minutes: 40
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_HOME: ${{ runner.temp }}/deep-review-copilot-home
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/deep-review-reports" "$COPILOT_HOME"
+          review_status=0
+          # Keep model-generated text out of the Actions workflow-command parser.
+          # Copilot's tool policy is not an OS sandbox for the source checkout.
+          bash "$GITHUB_WORKSPACE/deep-review-tool/skills/deep-review/scripts/deep-review.sh" \
+            --ci --provider copilot \
+            --base "$PR_BASE_SHA" \
+            --max-concurrent 2 \
+            --artifacts-dir "$RUNNER_TEMP/deep-review-state" \
+            --output "$RUNNER_TEMP/deep-review-reports/review.md" \
+            --fail-on none \
+            core >"$RUNNER_TEMP/deep-review-run.log" 2>&1 || review_status=$?
+          printf 'exit_code=%s\n' "$review_status" >>"$GITHUB_OUTPUT"
+          printf 'Deep Code Review exit code: %s. See the summary and report artifact.\n' "$review_status"
+
+      - name: Publish job summary
+        if: always()
+        env:
+          REVIEW_EXIT_CODE: ${{ steps.review.outputs.exit_code }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          report = Path(os.environ["RUNNER_TEMP"]) / "deep-review-reports/review.md"
+          status = os.environ.get("REVIEW_EXIT_CODE") or "unavailable"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write(f"## Deep Code Review\n\nRunner exit code: `{status}`.\n\n")
+              if report.is_file():
+                  text = report.read_text(encoding="utf-8", errors="replace")
+                  summary.write(text[:100_000])
+                  if len(text) > 100_000:
+                      summary.write("\n\nReport truncated here; download the complete artifact.\n")
+              else:
+                  summary.write("No Markdown report was produced. Check the setup steps and any JSON report artifact.\n")
+          PY
+
+      - name: Upload final reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deep-review-copilot-${{ github.event.pull_request.number }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/deep-review-reports/review.md
+            ${{ runner.temp }}/deep-review-reports/review.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Apply review result
+        if: always()
+        env:
+          REVIEW_EXIT_CODE: ${{ steps.review.outputs.exit_code }}
+        shell: bash
+        run: |
+          case "$REVIEW_EXIT_CODE" in
+            0|1|2|3) exit "$REVIEW_EXIT_CODE" ;;
+            *) echo 'Review did not produce a process result.' >&2; exit 1 ;;
+          esac

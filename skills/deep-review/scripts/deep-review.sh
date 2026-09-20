@@ -11,11 +11,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENGINE="$SCRIPT_DIR/deep-review-engine.sh"
 PROVIDER_SHIM_SOURCE="$SCRIPT_DIR/deep-review-provider-shim.sh"
 MKTEMP_SHIM_SOURCE="$SCRIPT_DIR/deep-review-mktemp-shim.sh"
+CI_HELPER="$SCRIPT_DIR/deep-review-ci.py"
 
 usage_extra() {
   cat <<'USAGE'
 
 Durability, output, and resource controls:
+  --ci                        Strict noninteractive review; fresh run, Python 3 required
+  --fail-on none|p0|p1|p2      CI gate: NEW findings at this priority or higher (default: none)
   --no-resume                 Never resume a matching interrupted run
   --artifacts-dir DIR         Persistent recovery/artifact root
   --results-dir DIR           Also export completed reports into DIR
@@ -45,6 +48,15 @@ Completed reviewer/stage outputs are checkpointed. After a crash, shutdown, OOM 
 or terminal interruption, the next matching invocation resumes from the most recent
 stale run and re-executes only work that did not finish cleanly. The final Markdown
 report is always saved as artifacts/review.md and is also streamed to stdout.
+
+CI mode requires a fixed --provider (or DEEP_REVIEW_PROVIDER), and --base (or
+REVIEW_BASE) for branch scope. It validates every stage, confidence score, and final
+finding ID; incomplete review is an error. The confidence threshold is strict in CI.
+JSON is saved as artifacts/review.json, beside --output as NAME.json, and with
+--results-dir as RUN.json/latest.json. GITHUB_OUTPUT receives deep_review_result,
+deep_review_json, and deep_review_artifacts, including on a findings gate failure.
+Exit codes: 0 complete/pass; 3 findings gate failed; 1 operational/incomplete;
+2 usage error. --fail-on requires --ci. CI mode disables interrupted-run recovery.
 USAGE
 }
 
@@ -124,9 +136,32 @@ FINGERPRINT_ARGS=()
 FINGERPRINT_SCOPE_MODE=branch
 FINGERPRINT_SCOPE_PATH=""
 FINGERPRINT_PATH_SET=0
+CI_MODE=0
+FAIL_ON=none
+FAIL_ON_SET=0
+CI_BASE="${REVIEW_BASE:-}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --ci)
+      CI_MODE=1
+      ENGINE_ARGS+=("$1")
+      FINGERPRINT_ARGS+=("$1")
+      shift
+      ;;
+    --fail-on)
+      [ "$#" -ge 2 ] || { echo "--fail-on requires none, p0, p1, or p2." >&2; exit 2; }
+      FAIL_ON="$2"
+      FAIL_ON_SET=1
+      shift 2
+      ;;
+    --base)
+      [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "--base requires a ref." >&2; exit 2; }
+      CI_BASE="$2"
+      ENGINE_ARGS+=("$1" "$2")
+      FINGERPRINT_ARGS+=("$1" "$2")
+      shift 2
+      ;;
     --version)
       printf 'Deep Code Review %s\n' "$RUNNER_VERSION"
       exit 0
@@ -209,6 +244,18 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+case "$FAIL_ON" in none|p0|p1|p2) ;; *) echo "--fail-on must be none, p0, p1, or p2." >&2; exit 2;; esac
+[ "$FAIL_ON_SET" -eq 0 ] || [ "$CI_MODE" -eq 1 ] || { echo "--fail-on requires --ci." >&2; exit 2; }
+if [ "$CI_MODE" -eq 1 ]; then
+  [ "$PROVIDER_REQUEST" != auto ] || { echo "--ci requires a fixed --provider or DEEP_REVIEW_PROVIDER." >&2; exit 2; }
+  [ "$FINGERPRINT_SCOPE_MODE" != branch ] || [ -n "$CI_BASE" ] || { echo "--ci branch reviews require --base or REVIEW_BASE." >&2; exit 2; }
+  command -v python3 >/dev/null 2>&1 || { echo "--ci requires Python 3." >&2; exit 1; }
+  [ -s "$CI_HELPER" ] || { echo "CI report helper is missing: $CI_HELPER" >&2; exit 1; }
+  case "${CONFIDENCE_THRESHOLD:-80}" in *[!0-9]*|'') echo "CONFIDENCE_THRESHOLD must be 0-100." >&2; exit 2;; esac
+  [ "${CONFIDENCE_THRESHOLD:-80}" -le 100 ] || { echo "CONFIDENCE_THRESHOLD must be 0-100." >&2; exit 2; }
+  RESUME=0
+fi
 
 ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ROOT_DIR="$(cd "$ROOT_DIR" && pwd)"
@@ -337,7 +384,8 @@ elif [ "$REQUESTED_MAX" -gt "$SAFE_MAX" ]; then
 fi
 
 # Resolve auto provider before fingerprinting so a recovered run cannot silently mix
-# Claude and Codex if installed provider availability changes between invocations.
+# providers if installed availability changes between invocations. Copilot is
+# explicit opt-in and does not change the historical Codex/Claude auto order.
 case "$PROVIDER_REQUEST" in
   auto)
     if command -v codex >/dev/null 2>&1; then RESOLVED_PROVIDER=codex
@@ -497,6 +545,7 @@ fi
 REAL_MKTEMP="$(command -v mktemp)"
 REAL_CODEX="$(command -v codex 2>/dev/null || true)"
 REAL_CLAUDE="$(command -v claude 2>/dev/null || true)"
+REAL_COPILOT="$(command -v copilot 2>/dev/null || true)"
 SHIM_DIR="$WORK_DIR/.shims"
 mkdir -p "$SHIM_DIR"
 
@@ -507,6 +556,7 @@ cp "$PROVIDER_SHIM_SOURCE" "$SHIM_DIR/provider-shim"
 chmod +x "$SHIM_DIR/provider-shim"
 [ -z "$REAL_CODEX" ] || ln -sf provider-shim "$SHIM_DIR/codex"
 [ -z "$REAL_CLAUDE" ] || ln -sf provider-shim "$SHIM_DIR/claude"
+[ -z "$REAL_COPILOT" ] || ln -sf provider-shim "$SHIM_DIR/copilot"
 
 atomic_copy_file() {
   source_file="$1"
@@ -544,8 +594,19 @@ sync_work_artifacts() {
 finish_state() {
   status=$1
   trap - EXIT INT TERM HUP
+  if [ "$CI_MODE" -eq 1 ] && [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then
+    failure_message="Review did not complete (exit $status). Inspect stage logs and partial outputs in the artifacts."
+    if [ -s "$WORK_DIR/ci-error.txt" ]; then
+      failure_message="Review did not complete: $(sed -n '1p' "$WORK_DIR/ci-error.txt") (exit $status)."
+    fi
+    python3 "$CI_HELPER" error --directory "$WORK_DIR" --provider "$RESOLVED_PROVIDER" \
+      --scope "$FINGERPRINT_SCOPE_MODE" --base "$CI_BASE" \
+      --head "$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || true)" \
+      --confidence "${CONFIDENCE_THRESHOLD:-80}" --fail-on "$FAIL_ON" \
+      --message "$failure_message" || true
+  fi
   sync_work_artifacts
-  if [ "$status" -eq 0 ]; then
+  if [ "$status" -eq 0 ] || { [ "$CI_MODE" -eq 1 ] && [ "$status" -eq 3 ]; }; then
     printf '%s\n' completed >"$RUN_DIR/status"
     printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$RUN_DIR/completed-at"
     cp "$RUN_DIR/status" "$RUN_DIR/artifacts/status" 2>/dev/null || true
@@ -583,7 +644,10 @@ export DEEP_REVIEW_BOOT_ID="$BOOT_ID"
 export DEEP_REVIEW_REAL_MKTEMP="$REAL_MKTEMP"
 export DEEP_REVIEW_REAL_CODEX="$REAL_CODEX"
 export DEEP_REVIEW_REAL_CLAUDE="$REAL_CLAUDE"
+export DEEP_REVIEW_REAL_COPILOT="$REAL_COPILOT"
 export DEEP_REVIEW_SCORE_BATCH_SIZE="$SCORE_BATCH_SIZE"
+export DEEP_REVIEW_CI="$CI_MODE"
+export DEEP_REVIEW_FAIL_ON="$FAIL_ON"
 export PATH="$SHIM_DIR:$PATH"
 
 bash "$ENGINE" --max-concurrent "$SAFE_MAX" --keep-results "${ENGINE_ARGS[@]}" &
@@ -593,6 +657,9 @@ wait "$ENGINE_PID"
 status=$?
 set -e
 ENGINE_PID=""
+if [ "$CI_MODE" -eq 1 ]; then
+  case "$status" in 0|1|2|3) ;; *) status=1;; esac
+fi
 
 publish_ci_paths() {
   result_path="$1"
@@ -600,20 +667,26 @@ publish_ci_paths() {
   if [ -n "${GITHUB_OUTPUT:-}" ] && [ -f "$GITHUB_OUTPUT" ] && [ -w "$GITHUB_OUTPUT" ]; then
     printf 'deep_review_result=%s\n' "$result_path" >>"$GITHUB_OUTPUT" || true
     printf 'deep_review_artifacts=%s\n' "$artifacts_path" >>"$GITHUB_OUTPUT" || true
+    if [ "$CI_MODE" -eq 1 ]; then
+      printf 'deep_review_json=%s\n' "${3:-$artifacts_path/review.json}" >>"$GITHUB_OUTPUT" || true
+    fi
   fi
 }
 
-if [ "$status" -eq 0 ]; then
-  finish_state 0
+if [ "$status" -eq 0 ] || [ "$CI_MODE" -eq 1 ]; then
+  finish_state "$status"
   trap - EXIT
 
   SAVED_RESULT="$RUN_DIR/artifacts/review.md"
+  SAVED_JSON="$RUN_DIR/artifacts/review.json"
+  publish_ci_paths "$SAVED_RESULT" "$RUN_DIR/artifacts" "$SAVED_JSON"
   if [ ! -s "$SAVED_RESULT" ]; then
     echo "Review completed but no final report was saved." >&2
     exit 1
   fi
 
   EXPORTED_RESULT="$SAVED_RESULT"
+  EXPORTED_JSON="$SAVED_JSON"
   if [ -n "$RESULTS_DIR" ]; then
     mkdir -p "$RESULTS_DIR" || { echo "Cannot create results directory: $RESULTS_DIR" >&2; exit 1; }
     chmod 700 "$RESULTS_DIR" 2>/dev/null || true
@@ -621,17 +694,27 @@ if [ "$status" -eq 0 ]; then
     result_in_dir="$RESULTS_DIR/$run_name.md"
     atomic_copy_file "$SAVED_RESULT" "$result_in_dir" || { echo "Cannot export review result to: $result_in_dir" >&2; exit 1; }
     atomic_copy_file "$SAVED_RESULT" "$RESULTS_DIR/latest.md" || { echo "Cannot update latest result in: $RESULTS_DIR" >&2; exit 1; }
+    if [ "$CI_MODE" -eq 1 ]; then
+      atomic_copy_file "$SAVED_JSON" "$RESULTS_DIR/$run_name.json" || { echo "Cannot export review JSON." >&2; exit 1; }
+      atomic_copy_file "$SAVED_JSON" "$RESULTS_DIR/latest.json" || { echo "Cannot update latest JSON." >&2; exit 1; }
+      EXPORTED_JSON="$RESULTS_DIR/$run_name.json"
+    fi
     EXPORTED_RESULT="$result_in_dir"
   fi
   if [ -n "$RESULT_FILE" ]; then
     atomic_copy_file "$SAVED_RESULT" "$RESULT_FILE" || { echo "Cannot export review result to: $RESULT_FILE" >&2; exit 1; }
     EXPORTED_RESULT="$RESULT_FILE"
+    if [ "$CI_MODE" -eq 1 ]; then
+      case "$RESULT_FILE" in *.md) json_file="${RESULT_FILE%.md}.json";; *) json_file="$RESULT_FILE.json";; esac
+      atomic_copy_file "$SAVED_JSON" "$json_file" || { echo "Cannot export review JSON to: $json_file" >&2; exit 1; }
+      EXPORTED_JSON="$json_file"
+    fi
   fi
 
   printf 'Saved review result: %s\n' "$SAVED_RESULT" >&2
   [ "$EXPORTED_RESULT" = "$SAVED_RESULT" ] || printf 'Exported review result: %s\n' "$EXPORTED_RESULT" >&2
   printf 'Saved review artifacts: %s\n' "$RUN_DIR/artifacts" >&2
-  publish_ci_paths "$EXPORTED_RESULT" "$RUN_DIR/artifacts"
+  publish_ci_paths "$EXPORTED_RESULT" "$RUN_DIR/artifacts" "$EXPORTED_JSON"
 
   keep="${DEEP_REVIEW_KEEP_COMPLETED_RUNS:-20}"
   case "$keep" in *[!0-9]*|'') keep=20;; esac
@@ -649,7 +732,7 @@ if [ "$status" -eq 0 ]; then
     done
     IFS="$old_ifs"
   fi
-  exit 0
+  exit "$status"
 fi
 
 finish_state "$status"

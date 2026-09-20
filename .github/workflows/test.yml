@@ -52,7 +52,7 @@ jobs:
         shell: bash
         run: |
           output="$(bash skills/deep-review/scripts/deep-review.sh --help)"
-          grep -q -- '--provider codex|claude|auto' <<<"$output"
+          grep -q -- '--provider codex|claude|copilot|auto' <<<"$output"
           grep -q -- '--changes' <<<"$output"
           grep -q -- '--no-auto-specialists' <<<"$output"
           grep -q -- '--no-resume' <<<"$output"
@@ -61,3 +61,32 @@ jobs:
           test "$version" = 'Deep Code Review 1.2.0'
           grep -q 'FULL=.*accessibility-scanner' skills/deep-review/scripts/deep-review-engine.sh
           grep -q 'confidence scorer for a batch' skills/deep-review/scripts/deep-review-engine.sh
+
+  ci-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Strict CI regression tests (no model credentials)
+        shell: bash
+        run: bash scripts/test-deep-review-ci.sh
+
+      - name: Copilot provider and lifecycle tests (no model credentials)
+        shell: bash
+        run: bash scripts/test-copilot-provider.sh
+
+      - name: Plugin and reviewer validation
+        shell: bash
+        run: |
+          bash scripts/test-plugin-packaging.sh
+          bash scripts/test-reviewer-coverage.sh
+          bash scripts/test-reviewer-knowledge.sh
+          bash scripts/test-reviewer-fixtures.sh

@@ -4,6 +4,7 @@ provider="$(basename "$0")"
 case "$provider" in
   codex) real="${DEEP_REVIEW_REAL_CODEX:-}" ;;
   claude) real="${DEEP_REVIEW_REAL_CLAUDE:-}" ;;
+  copilot) real="${DEEP_REVIEW_REAL_COPILOT:-}" ;;
   *) echo "Unknown provider shim: $provider" >&2; exit 127 ;;
 esac
 [ -n "$real" ] || { echo "Provider '$provider' is unavailable." >&2; exit 127; }
@@ -15,7 +16,10 @@ else
   want_prompt=0
   for arg in "$@"; do
     if [ "$want_prompt" -eq 1 ]; then prompt="$arg"; break; fi
-    [ "$arg" != -p ] || want_prompt=1
+    case "$arg" in
+      -p|--prompt) want_prompt=1 ;;
+      --prompt=*) prompt="${arg#--prompt=}"; break ;;
+    esac
   done
 fi
 
@@ -31,7 +35,12 @@ case "$prompt" in
     ;;
   *"stack profiling instructions"*) stage=stack; target="$work_dir/stack-context.md" ;;
   *"synthesis agent for a multi-agent code review"*) stage=synthesis; target="$work_dir/REPORT.md" ;;
-  *"extract every distinct code-review finding"*) stage=extract; target="$work_dir/findings/count.txt" ;;
+  *"extract every distinct code-review finding"*)
+    stage=extract
+    if [ "${DEEP_REVIEW_CI:-0}" = 1 ]; then target="$work_dir/findings/extracted.json"
+    else target="$work_dir/findings/count.txt"
+    fi
+    ;;
   *"independent code-review confidence scorer for a batch"*)
     stage=score-batch
     target="$(printf '%s\n' "$prompt" | sed -n 's/^Score batch marker: //p' | head -1)"
@@ -41,7 +50,12 @@ case "$prompt" in
     stage=score
     target="$(printf '%s\n' "$prompt" | sed -n 's/^Write exactly two lines to \(.*\):$/\1/p' | head -1)"
     ;;
-  *"final code-review triage editor"*) stage=final; target="$work_dir/FINAL.md" ;;
+  *"final code-review triage editor"*)
+    stage=final
+    if [ "${DEEP_REVIEW_CI:-0}" = 1 ]; then target="$work_dir/triage.json"
+    else target="$work_dir/FINAL.md"
+    fi
+    ;;
 esac
 [ -n "$stage" ] || stage=provider
 
