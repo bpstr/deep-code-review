@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AGENTS="$ROOT/skills/deep-review/agents"
 SKILL="$ROOT/skills/deep-review/SKILL.md"
-RUNNER="$ROOT/skills/deep-review/scripts/deep-review.sh"
+RUNNER="$ROOT/skills/deep-review/scripts/deep-review-engine.sh"
 STACK_PROFILER="$ROOT/skills/deep-review/support/stack-profiler.md"
 
 required=(

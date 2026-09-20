@@ -9,9 +9,10 @@ bash -n skills/deep-review/scripts/deep-review-mktemp-shim.sh
 bash -n scripts/test-deep-review-recovery.sh
 bash -n scripts/test-deep-review-efficiency.sh
 bash -n scripts/test-provider-lifecycle.sh
+bash -n scripts/test-copilot-provider.sh
 
 output="$(bash skills/deep-review/scripts/deep-review.sh --help)"
-grep -q -- '--provider codex|claude|auto' <<<"$output"
+grep -q -- '--provider codex|claude|copilot|auto' <<<"$output"
 grep -q -- '--changes' <<<"$output"
 grep -q -- '--no-auto-specialists' <<<"$output"
 grep -q -- '--no-resume' <<<"$output"
@@ -38,7 +39,9 @@ grep -q 'run_provider_background' skills/deep-review/scripts/deep-review-engine.
 grep -q 'confidence scorer for a batch' skills/deep-review/scripts/deep-review-engine.sh
 
 bash scripts/test-provider-lifecycle.sh
+bash scripts/test-copilot-provider.sh
 bash scripts/test-deep-review-recovery.sh
 bash scripts/test-deep-review-efficiency.sh
+bash scripts/test-deep-review-ci.sh
 
 echo "deep-review runner smoke test passed"
