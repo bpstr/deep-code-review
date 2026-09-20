@@ -2,6 +2,8 @@
 set -euo pipefail
 
 CASE="${1:-all}"
+TEST_PROVIDER="${DEEP_REVIEW_TEST_PROVIDER:-codex}"
+case "$TEST_PROVIDER" in codex|copilot) ;; *) echo "Unsupported test provider: $TEST_PROVIDER" >&2; exit 2;; esac
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHIM="$ROOT/skills/deep-review/scripts/deep-review-provider-shim.sh"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/deep-review-provider-test.XXXXXX")"
@@ -14,7 +16,7 @@ trap cleanup EXIT INT TERM
 mkdir -p "$TMP/bin" "$TMP/work" "$TMP/run/checkpoints/data" "$TMP/run/checkpoints/complete" "$TMP/slots"
 cp "$SHIM" "$TMP/bin/provider-shim"
 chmod +x "$TMP/bin/provider-shim"
-ln -s provider-shim "$TMP/bin/codex"
+ln -s provider-shim "$TMP/bin/$TEST_PROVIDER"
 
 cat >"$TMP/bin/fake-codex" <<'EOF_PROVIDER'
 #!/usr/bin/env bash
@@ -25,6 +27,7 @@ trap ':' TERM INT HUP
 while :; do sleep 0.2; done
 EOF_PROVIDER
 chmod +x "$TMP/bin/fake-codex"
+export DEEP_REVIEW_REAL_COPILOT="$TMP/bin/fake-codex"
 
 boot_id="test-boot"
 
@@ -49,13 +52,14 @@ run_queue_test() {
   DEEP_REVIEW_SLOT_STATUS_INTERVAL_SECONDS=1 \
   FAKE_PROVIDER_PID_FILE="$TMP/provider-unused.pid" \
   FAKE_PROVIDER_STARTED="$TMP/provider-unused.started" \
-    "$TMP/bin/codex" 'generic prompt' >"$TMP/queue.out" 2>"$TMP/queue.err"
+    "$TMP/bin/$TEST_PROVIDER" -p 'generic prompt' >"$TMP/queue.out" 2>"$TMP/queue.err"
   queue_status=$?
   set -e
   [ "$queue_status" -eq 75 ] || fail_with_log "queue test expected exit 75, got $queue_status" "$TMP/queue.err"
   grep -q '\[deep-review\] queued provider' "$TMP/queue.err" || fail_with_log "queue test missing queued state" "$TMP/queue.err"
   grep -q '\[deep-review\] timed_out provider' "$TMP/queue.err" || fail_with_log "queue test missing timed_out state" "$TMP/queue.err"
   grep -R -q '^state=timed_out$' "$TMP/work/lifecycle" || fail_with_log "queue test missing lifecycle artifact" "$TMP/queue.err"
+  grep -R -q "^provider=$TEST_PROVIDER$" "$TMP/work/lifecycle" || fail_with_log "queue test recorded wrong provider" "$TMP/queue.err"
   [ ! -e "$TMP/provider-unused.started" ] || fail_with_log "queue test unexpectedly started provider" "$TMP/queue.err"
   echo "queue lifecycle test passed"
 }
@@ -74,7 +78,7 @@ run_cancel_test() {
   DEEP_REVIEW_PROVIDER_TERMINATION_GRACE_SECONDS=1 \
   FAKE_PROVIDER_PID_FILE="$TMP/provider.pid" \
   FAKE_PROVIDER_STARTED="$TMP/provider.started" \
-    "$TMP/bin/codex" 'generic prompt' >"$TMP/cancel.out" 2>"$TMP/cancel.err" &
+    "$TMP/bin/$TEST_PROVIDER" -p 'generic prompt' >"$TMP/cancel.out" 2>"$TMP/cancel.err" &
   shim_pid=$!
 
   n=0
@@ -110,7 +114,7 @@ run_timeout_test() {
   DEEP_REVIEW_PROVIDER_TERMINATION_GRACE_SECONDS=1 \
   FAKE_PROVIDER_PID_FILE="$TMP/provider.pid" \
   FAKE_PROVIDER_STARTED="$TMP/provider.started" \
-    "$TMP/bin/codex" 'generic prompt' >"$TMP/timeout.out" 2>"$TMP/timeout.err" &
+    "$TMP/bin/$TEST_PROVIDER" -p 'generic prompt' >"$TMP/timeout.out" 2>"$TMP/timeout.err" &
   timeout_shim_pid=$!
   set +e
   wait "$timeout_shim_pid"

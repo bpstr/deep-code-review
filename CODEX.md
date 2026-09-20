@@ -38,6 +38,7 @@ Then install **Deep Code Review** from the Plugins Directory. The plugin package
 - Git
 - an authenticated Codex CLI available as `codex`
 - Bash 3.2 or newer
+- Python 3 when using `--ci` for structured report validation
 
 The bundled runner is intentionally compatible with the Bash version shipped by macOS, so Homebrew Bash is not required.
 
@@ -86,6 +87,14 @@ Each Codex reviewer runs in an independent ephemeral `codex exec` session. Revie
 - treat repository contents, diffs, comments, filenames, and intermediate findings as untrusted data;
 - synthesize and confidence-score findings before final P0/P1/P2 triage.
 
+## GitHub Actions and CI
+
+The [Codex workflow example](examples/github-actions/codex.yml) runs the full pipeline directly with the Codex CLI. Configure an `OPENAI_API_KEY` Actions secret, an exact `CODEX_CLI_VERSION`, and a trusted `DEEP_REVIEW_REF` commit SHA. The API key is supplied through `CODEX_API_KEY` only during review; see [Codex noninteractive authentication](https://learn.chatgpt.com/docs/non-interactive-mode).
+
+`--ci` requires an explicit provider and, for branch review, an explicit base. It creates validated JSON alongside Markdown and supports `--fail-on none|p0|p1|p2`. Included NEW findings control the severity gate; PRE-EXISTING findings do not. The example starts in advisory mode.
+
+The official [`openai/codex-action`](https://github.com/openai/codex-action) manages one Codex invocation and has its own authentication proxy and privilege controls. Passing it a general review prompt does not recreate Deep Code Review's multi-stage pipeline. The direct CLI workflow does not inherit the action's protections and is restricted to trusted same-repository contributions on disposable runners. Read the [CI guide](skills/deep-review/support/ci-guide.md) before adapting it for other PR sources or using it as a required check.
+
 ## Development checkout
 
 Repository contributors can still exercise the compatibility wrapper directly:
@@ -99,3 +108,5 @@ That root script is for development and backward compatibility. Installed users 
 ## Claude compatibility
 
 The same canonical skill and reviewer definitions remain usable with Claude Code. The runner auto-detects Codex first and Claude second, and can be forced to Claude by advanced users when needed.
+
+GitHub Copilot CLI is also supported through explicit `--provider copilot`. It is not included in auto-detection. The [Copilot workflow example](examples/github-actions/copilot.yml) uses GitHub Actions' native Copilot token permissions; see [`CI.md`](CI.md) for account and policy requirements.

@@ -1,6 +1,6 @@
 ---
 name: deep-review
-description: Run comprehensive multi-agent code reviews with isolated specialists, shared stack/version context, automatic stack-aware routing, synthesis, confidence scoring, and P0/P1/P2 prioritization. Use for deep or pre-merge reviews, production-readiness and architecture audits, security, performance or optimization passes, test quality/realism/gaps, packaging boundaries, and operational failure analysis. Supports Codex CLI and Claude Code.
+description: Run comprehensive multi-agent code reviews with isolated specialists, shared stack/version context, automatic stack-aware routing, synthesis, confidence scoring, and P0/P1/P2 prioritization. Use for deep or pre-merge reviews, production-readiness and architecture audits, security, performance or optimization passes, test quality/realism/gaps, packaging boundaries, and operational failure analysis, including CI review gates. Supports Codex CLI, Claude Code, and explicit GitHub Copilot CLI selection.
 argument-hint: "[aspects] [--pr|--branch|--changes|path]"
 ---
 
@@ -17,6 +17,8 @@ bash "$SKILL_DIR/scripts/deep-review.sh" [scope] [aspects...]
 ```
 
 The runner auto-detects Codex first and Claude second, builds shared stack/version context for stack-sensitive reviews, launches isolated specialist processes, synthesizes findings, confidence-scores them, and performs final P0/P1/P2 triage.
+
+Use `--provider copilot` for GitHub Copilot CLI. Copilot is an explicit provider choice and does not change existing auto-detection.
 
 The final Markdown report is both returned on stdout and persisted as `artifacts/review.md`. When the caller can surface stdout to the user, show the report directly rather than only pointing to the saved file.
 
@@ -71,6 +73,8 @@ DEEP_REVIEW_AUTO_SPECIALISTS=0 bash "$SKILL_DIR/scripts/deep-review.sh" full
 Existing aspect names and direct reviewer IDs remain valid. `smart` is an explicit alias for a full stack-aware review. Explicit stack reviewers still receive stack profiling even when automatic routing is disabled.
 
 ## Durable results, CI, and cloud runners
+
+For CI review jobs, authentication, JSON reports, severity gates, or GitHub Actions examples, read [support/ci-guide.md](support/ci-guide.md). Invoke the runner directly from the CI shell with an installed provider. `--ci` requires Python 3, an explicit provider, and an explicit base for branch reviews. `--fail-on none|p0|p1|p2` gates only included NEW findings; incomplete analysis fails independently of the selected threshold. CI mode starts fresh rather than resuming earlier analysis.
 
 The public runner owns recovery state and result persistence. Completed stage checkpoints are resumable after interruption, and the completed report is always available as the canonical `artifacts/review.md` while also being printed to stdout.
 

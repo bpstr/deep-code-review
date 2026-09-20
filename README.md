@@ -1,6 +1,6 @@
 # Deep Code Review
 
-Deep Code Review is a comprehensive multi-agent code review system for **OpenAI Codex** and **Claude Code**.
+Deep Code Review is a comprehensive multi-agent code review system for **OpenAI Codex**, **Claude Code**, and **GitHub Copilot CLI**.
 
 Instead of asking one model to review everything in one context, it runs focused specialist reviewers, synthesizes their findings, independently confidence-scores them, and produces a final P0/P1/P2 report.
 
@@ -36,7 +36,7 @@ Key capabilities:
 
 - **60+ specialized review agents**
 - deep test-quality analysis for false greens, unrealistic scenarios, weak oracles, brittle mocks, nondeterminism, and missing behavioral coverage
-- independent parallel Codex or Claude sessions
+- independent parallel Codex, Claude, or explicitly selected Copilot CLI sessions
 - one shared stack/version profile for version-sensitive reviews
 - fresh-context synthesis
 - independent confidence scoring
@@ -47,6 +47,7 @@ Key capabilities:
 - opt-in behavioral reviewer fixtures for positive/negative calibration
 - read-only review intent with prompt-injection and secret-handling protections
 - provider-neutral execution
+- noninteractive CI reviews with validated JSON reports and configurable gates for new findings
 - Bash 3.2/macOS-compatible canonical runner
 
 ## Stack-aware reviews
@@ -232,6 +233,19 @@ See [`REVIEWER-COVERAGE.md`](REVIEWER-COVERAGE.md).
 5. **Synthesis** — merge and deduplicate in a fresh context.
 6. **Confidence scoring** — challenge findings against code, diff and stack context to filter false positives.
 7. **Final triage** — normalize surviving findings into P0/P1/P2; omit style-only noise.
+
+## CI and GitHub Actions
+
+Run the same complete review pipeline in CI with an explicit provider and base commit:
+
+```bash
+./scripts/deep-review.sh --ci --provider codex --base "$PR_BASE_SHA" \
+  --max-concurrent 2 --fail-on p1 --output ./review.md core
+```
+
+CI mode requires Python 3, produces `review.md` and `review.json`, and returns a distinct exit code for new findings at the configured threshold. Failed or incomplete analysis also fails the job; an empty or invalid model response does not become a passing review. `--fail-on none` is the default for advisory reporting.
+
+Copyable [Codex](examples/github-actions/codex.yml) and [Copilot](examples/github-actions/copilot.yml) workflows include authentication, an immutable tool pin, explicit PR head/base scope, report artifacts, and a job summary. See [`CI.md`](CI.md) for setup and the differences between Codex CLI, `openai/codex-action`, Copilot CLI, and GitHub's built-in Copilot review.
 
 ## Safety
 

@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased — 2026-09-12
+## Unreleased — 2026-09-20
+
+- Add an explicit CI mode with validated JSON results, deterministic Markdown reports, and failure on incomplete review stages. Empty diffs produce a successful report without model calls.
+- Add optional P0/P1/P2 failure thresholds for new findings, separate from operational failures and confidence filtering.
+- Support GitHub Copilot CLI as an explicitly selected provider alongside Codex CLI and Claude Code.
+- Provide GitHub Actions examples for the complete Codex and Copilot review pipelines, including authentication, immutable tool revisions, bounded concurrency, report artifacts, and optional merge checks.
+- Exercise CI report validation, failure paths, and provider integration with offline fake-provider regressions.
 
 - Bound machine-wide provider-slot waits with an explicit timeout instead of allowing silent indefinite queueing.
 - Persist and log provider lifecycle states (`queued`, `running`, `completed`, `failed`, `cancelled`, `timed_out`) with stage runtimes for diagnostics.
