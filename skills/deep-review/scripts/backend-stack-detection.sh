@@ -38,16 +38,18 @@ backend_data_has() {
 backend_context_signals() {
   local dir="$1" composer_seen=0 python_seen=0 jvm_seen=0 file found
   while :; do
-    if [ "$composer_seen" -eq 0 ] && [ -f "$dir/composer.json" ]; then
-      composer_seen=1
-      printf '%s\n' php
-      if backend_data_has '"(drupal/core(-recommended|-dev)?|drupal/drupal)"|"type"[[:space:]]*:[[:space:]]*"drupal-(module|theme|profile)"' "$dir/composer.json"; then printf '%s\n' drupal; fi
-      if backend_data_has '"laravel/framework"[[:space:]]*:' "$dir/composer.json"; then printf '%s\n' laravel; fi
+    if [ "$composer_seen" -eq 0 ]; then
+      # Extension metadata belongs to this package, not an unrelated ancestor app.
+      for file in "$dir"/*.info.yml "$dir"/*.info; do
+        if backend_data_has "^[[:space:]]*core_version_requirement[[:space:]]*:|^[[:space:]]*core[[:space:]]*=[[:space:]]*['\"]?7\\.x" "$file"; then printf '%s\n' drupal; fi
+      done
+      if [ -f "$dir/composer.json" ]; then
+        composer_seen=1
+        printf '%s\n' php
+        if backend_data_has '"(drupal/core(-recommended|-dev)?|drupal/drupal)"|"type"[[:space:]]*:[[:space:]]*"drupal-(module|theme|profile)"' "$dir/composer.json"; then printf '%s\n' drupal; fi
+        if backend_data_has '"laravel/framework"[[:space:]]*:' "$dir/composer.json"; then printf '%s\n' laravel; fi
+      fi
     fi
-    # Extension metadata works for standalone modern and Drupal 7 modules.
-    for file in "$dir"/*.info.yml "$dir"/*.info; do
-      if backend_data_has "^[[:space:]]*core_version_requirement[[:space:]]*:|^[[:space:]]*core[[:space:]]*=[[:space:]]*['\"]?7\\.x" "$file"; then printf '%s\n' drupal; fi
-    done
     if [ "$python_seen" -eq 0 ]; then
       found=0
       for file in "$dir"/pyproject.toml "$dir"/setup.cfg "$dir"/setup.py "$dir"/Pipfile "$dir"/requirements*.txt "$dir"/requirements/*.txt; do
@@ -116,8 +118,9 @@ detect_backend_specialists() {
       case "$signals" in *spring*) printf '%s\n' spring-reviewer ;; esac
       case "$path:$signals" in *.kt:*spring*|*.kt:*ktor*) printf '%s\n' kotlin-server-reviewer ;; esac
     fi
-    # Explicit imports can identify standalone sources without manifests.
+    # Explicit imports/schema namespaces identify standalone sources without manifests.
     case "$path" in
+      *.xml) if backend_data_has 'https?://www\.springframework\.org/schema/' "$path"; then printf '%s\n' spring-reviewer; fi ;;
       *.py) if backend_data_has '^[[:space:]]*(from|import)[[:space:]]+django([.[:space:]]|$)' "$path"; then printf '%s\n' django-reviewer; fi ;;
       *.java|*.kt) if backend_data_has '^[[:space:]]*import[[:space:]]+org\.springframework\.' "$path"; then printf '%s\n' spring-reviewer; case "$path" in *.kt) printf '%s\n' kotlin-server-reviewer ;; esac; fi ;;
     esac

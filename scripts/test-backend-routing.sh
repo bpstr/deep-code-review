@@ -94,8 +94,17 @@ put web/vendor/package/lib.php '<?php'
 check vendor-only web/vendor/package/lib.php ''
 check explicit-mixed "web/app/Task.php
 backend/src/Main.java" 'java-reviewer laravel-reviewer php-reviewer spring-reviewer'
+put legacy/library/composer.json '{"require":{"php":"^8.2"}}'
+put legacy/library/src/Value.php '<?php'
+check drupal-package-boundary legacy/library/src/Value.php php-reviewer
+put cms/web/modules/custom/demo/demo.js 'Drupal.behaviors.demo = {};'
+check drupal-behavior-asset cms/web/modules/custom/demo/demo.js 'drupal-reviewer php-reviewer'
+put legacy-spring/context.xml '<beans xmlns="http://www.springframework.org/schema/beans" />'
+check spring-xml-namespace legacy-spring/context.xml spring-reviewer
 # No command substitution or setup.py code is executed during manifest inspection.
-put hostile/setup.py 'import os; os.system("touch EXECUTED") # django'
+put hostile/setup.py 'import os
+os.system("touch EXECUTED")
+setup(install_requires=["Django>=5.2"])'
 put hostile/views.py 'pass'
 check data-only hostile/views.py 'django-reviewer python-reviewer'
 test ! -e EXECUTED
