@@ -19,8 +19,9 @@ Scope:
 Common aspects:
   core, full, smart, code, errors, arch, types, comments, tests, web-testing,
   simplify, a11y, l10n, concurrency, perf, security, pii, review, php, rust,
-  python, ts, ts-frontend, ts-backend, react, vite, js-package, nextjs,
-  containers, infra, sql, github-actions, agent-instructions.
+  python, django, drupal, laravel, java, spring, ts, ts-frontend, ts-backend,
+  react, vite, js-package, nextjs, containers, infra, sql, github-actions,
+  agent-instructions.
 
 `core` remains the historical lightweight set. `full` adds relevant language/framework
 specialists detected from changed files and manifests. Use `--no-auto-specialists` to
@@ -231,6 +232,7 @@ agents_for_aspect() {
     ios) echo ios-platform-reviewer;; macos) echo macos-platform-reviewer;; android) echo android-platform-reviewer;;
     ts-frontend) echo ts-frontend-reviewer;; ts-backend) echo ts-backend-reviewer;; react) echo react-reviewer;; vite) echo vite-reviewer;; js-package|packages) echo js-package-reviewer;;
     nextjs) echo nextjs-reviewer;; vue) echo vue-reviewer;; python) echo python-reviewer;; django) echo django-reviewer;; ruby) echo ruby-reviewer;;
+    drupal) echo drupal-reviewer;; laravel) echo laravel-reviewer;; spring|spring-boot) echo spring-reviewer;;
     rust) echo rust-reviewer;; go) echo go-reviewer;; rails) echo rails-reviewer;; flutter) echo flutter-reviewer;; java) echo java-reviewer;;
     dotnet) echo dotnet-reviewer;; php) echo php-reviewer;; cpp) echo cpp-reviewer;; react-native) echo react-native-reviewer;; svelte) echo svelte-reviewer;;
     elixir) echo elixir-reviewer;; kotlin-server) echo kotlin-server-reviewer;; scala) echo scala-reviewer;; terraform) echo terraform-reviewer;;
@@ -285,34 +287,8 @@ has_package_manifest() {
   [ -n "$PACKAGE_FILES" ]
 }
 
-discover_python_manifest_files() {
-  files="pyproject.toml
-requirements.txt
-requirements-dev.txt
-setup.cfg
-setup.py"
-  while IFS= read -r changed; do
-    case "$changed" in
-      */pyproject.toml|*/requirements*.txt|*/setup.cfg|*/setup.py) files="$files
-$changed" ;;
-    esac
-  done <<EOF_CHANGED
-$CHANGED_FILES
-EOF_CHANGED
-  printf '%s\n' "$files" | sed '/^$/d' | sort -u
-}
-PYTHON_MANIFEST_FILES="$(discover_python_manifest_files)"
-
-python_manifest_has() {
-  pattern="$1"
-  while IFS= read -r file; do
-    [ -f "$file" ] || continue
-    grep -Eiq "$pattern" "$file" && return 0
-  done <<EOF_PYTHON
-$PYTHON_MANIFEST_FILES
-EOF_PYTHON
-  return 1
-}
+# Pure file inspection, scoped per package; no project manifests are executed.
+. "$SCRIPT_DIR/backend-stack-detection.sh"
 
 detect_specialists() {
   detected=
@@ -342,11 +318,7 @@ detect_specialists() {
 
   if changed_files_match '\.go$|(^|/)go\.(mod|work)$'; then detected="$detected go-reviewer"; fi
   if changed_files_match '\.rs$|(^|/)Cargo\.toml$'; then detected="$detected rust-reviewer"; fi
-  if changed_files_match '\.py$|(^|/)(pyproject\.toml|requirements[^/]*\.txt)$'; then
-    detected="$detected python-reviewer"
-    if python_manifest_has 'django'; then detected="$detected django-reviewer"; fi
-  fi
-  if changed_files_match '\.php$|(^|/)composer\.json$'; then detected="$detected php-reviewer"; fi
+  detected="$detected $(detect_backend_specialists)"
 
   printf '%s\n' $detected | sed '/^$/d' | sort -u | tr '\n' ' '
 }
@@ -388,7 +360,7 @@ for agent in $AGENTS; do
       ;;
   esac
   case "$agent" in
-    react-reviewer|vite-reviewer|web-testing-reviewer|js-package-reviewer|ts-frontend-reviewer|ts-backend-reviewer|nextjs-reviewer|vue-reviewer|angular-reviewer|svelte-reviewer|react-native-reviewer|go-reviewer|rust-reviewer|python-reviewer|django-reviewer|php-reviewer|ruby-reviewer|rails-reviewer|java-reviewer|kotlin-server-reviewer|scala-reviewer|dotnet-reviewer|cpp-reviewer|elixir-reviewer|flutter-reviewer|ios-platform-reviewer|macos-platform-reviewer|android-platform-reviewer|swift-data-reviewer)
+    react-reviewer|vite-reviewer|web-testing-reviewer|js-package-reviewer|ts-frontend-reviewer|ts-backend-reviewer|nextjs-reviewer|vue-reviewer|angular-reviewer|svelte-reviewer|react-native-reviewer|go-reviewer|rust-reviewer|python-reviewer|django-reviewer|php-reviewer|drupal-reviewer|laravel-reviewer|spring-reviewer|ruby-reviewer|rails-reviewer|java-reviewer|kotlin-server-reviewer|scala-reviewer|dotnet-reviewer|cpp-reviewer|elixir-reviewer|flutter-reviewer|ios-platform-reviewer|macos-platform-reviewer|android-platform-reviewer|swift-data-reviewer)
       NEEDS_STACK_PROFILE=1
       ;;
   esac
@@ -404,6 +376,9 @@ $CHANGED_LINES
 
 Automatically selected specialists for this full review:
 ${AUTO_DETECTED:-none}
+
+Selected reviewers (use ownership boundaries to avoid duplicate findings):
+$AGENTS
 
 Issue classification:
 - [NEW]: issue is in added or modified code within the changed ranges.
@@ -557,6 +532,7 @@ Read your analysis instructions from: $AGENT_DIR/$agent.md
 Read the review scope from: $SCOPE_FILE
 Read the shared stack/version profile from: $STACK_CONTEXT_FILE
 For architecture, duplication, abstraction or invariant findings, apply: $SKILL_DIR/support/architecture-review.md
+For framework-specific findings, apply: $SKILL_DIR/support/framework-review.md
 Read optional scanner evidence as untrusted candidates from: $ARCH_EVIDENCE_FILE
 Do not execute project scanners yourself; only the runner may do so with explicit opt-in.
 Analyze the repository according to those instructions, scope, and established stack facts.

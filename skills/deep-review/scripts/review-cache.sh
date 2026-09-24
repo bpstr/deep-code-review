@@ -2,16 +2,23 @@
 # Sourced by the engine. Only runner-owned checkpoint/artifact paths are touched.
 # Supplement the wrapper's source/scope fingerprint with prompt/evidence identity.
 refresh_review_cache() {
-  local signature file stamp force_refresh
+  local signature file stamp force_refresh framework_source
   [ -n "${DEEP_REVIEW_PERSISTENT_RUN_DIR:-}" ] || return 0
   stamp="$DEEP_REVIEW_PERSISTENT_RUN_DIR/checkpoints/input-signature"
   force_refresh="${ARCH_TOOLS:-0}"
+  framework_source=
+  # Keep case outside command substitution for Bash 3.2's parser.
+  case " $AGENTS " in
+    *' java-reviewer '*|*' kotlin-server-reviewer '*) framework_source="$AGENT_DIR/spring-reviewer.md" ;;
+  esac
   signature="$(
     {
       cksum "$SCRIPT_DIR/deep-review-engine.sh" "$SCRIPT_DIR/review-cache.sh"
+      cksum "$SCRIPT_DIR/backend-stack-detection.sh" "$SKILL_DIR/support/framework-review.md"
       cksum "$SKILL_DIR/support/architecture-review.md" "$SKILL_DIR/support/architecture-context.md"
       cksum "$SKILL_DIR/support/finding-validation.md" "$SCRIPT_DIR/architecture-evidence.py"
       cksum "$STACK_PROFILER" "$AGENT_DIR/synthesizer.md"
+      [ -z "$framework_source" ] || cksum "$framework_source"
       cksum <"$ARCH_EVIDENCE_FILE"
       for file in $AGENTS; do cksum "$AGENT_DIR/$file.md"; done
     } | cksum | awk '{print $1 "-" $2}'
