@@ -1,6 +1,6 @@
 ---
 name: deep-review
-description: Run comprehensive multi-agent code reviews with isolated specialists, shared stack/version context, automatic stack-aware routing, synthesis, confidence scoring, and P0/P1/P2 prioritization. Use for deep or pre-merge reviews, production-readiness and architecture audits, security, performance or optimization passes, test quality/realism/gaps, packaging boundaries, and operational failure analysis, including CI review gates. Supports Codex CLI, Claude Code, and explicit GitHub Copilot CLI selection.
+description: Run comprehensive multi-agent code reviews with isolated specialists, shared stack/version context, automatic stack-aware routing, synthesis, confidence scoring, and P0/P1/P2 prioritization. Use for deep or pre-merge reviews, production-readiness and architecture audits, framework antipatterns including Drupal/Laravel/Django/Spring, security, performance or optimization passes, test quality/realism/gaps, packaging boundaries, and operational failure analysis, including CI review gates. Supports Codex CLI, Claude Code, and explicit GitHub Copilot CLI selection.
 argument-hint: "[aspects] [--pr|--branch|--changes|path]"
 ---
 
@@ -39,7 +39,8 @@ Translate natural-language requests into the narrowest useful review set:
 - browser/web test reliability → `web-testing`
 - comprehensive web test review → `tests web-testing`
 - JS package/publishing/workspace boundaries → `js-package`
-- PHP/Laravel → add `php`
+- PHP → add `php`; Laravel → `php laravel`; Drupal → `php drupal`
+- Spring/Boot → add `spring` and the relevant `java` or `kotlin-server` language reviewer
 - Rust → add `rust`
 - Go → add `go`
 - Python → add `python`; add `django` when applicable
@@ -56,7 +57,7 @@ If the user names an exact aspect or reviewer ID, preserve it.
 
 `core` intentionally keeps the historical lightweight reviewer set and does not add an extra model call for stack profiling.
 
-`full` keeps the established cross-cutting reviewer set and additionally detects relevant specialists from changed files and manifests. Examples include Go, Rust, Python/Django, PHP, TypeScript frontend/backend, React, Vite, web testing, JavaScript package boundaries, Next.js, Vue, Angular, Svelte, and React Native.
+`full` keeps the established cross-cutting reviewer set and additionally detects relevant specialists from changed files and manifests. Examples include Go, Rust, Python/Django, PHP/Drupal/Laravel, Java/Spring, server Kotlin with framework evidence, TypeScript frontend/backend, React, Vite, web testing, JavaScript package boundaries, Next.js, Vue, Angular, Svelte, and React Native.
 
 Before stack-specific/full specialists run, one fast profiling pass writes shared `stack-context.md` facts such as declared/resolved versions, package manager/workspaces, app-vs-library shape, test tools, React Router/TanStack Query presence, module mode, and version-sensitive constraints. All specialists read the same profile. If profiling fails, reviewers fall back to inspecting manifests themselves and the final report notes the gap.
 
@@ -71,6 +72,17 @@ DEEP_REVIEW_AUTO_SPECIALISTS=0 bash "$SKILL_DIR/scripts/deep-review.sh" full
 ```
 
 Existing aspect names and direct reviewer IDs remain valid. `smart` is an explicit alias for a full stack-aware review. Explicit stack reviewers still receive stack profiling even when automatic routing is disabled.
+
+## Backend framework review
+
+For framework antipatterns and best practices, read [the backend framework guide](support/backend-frameworks.md) and apply [the framework evidence contract](support/framework-review.md).
+
+- `drupal-reviewer` (`drupal`) owns cacheability/access propagation, entity/route/form behavior, configuration and safe updates, with Drupal 7 versus modern-version gating.
+- `laravel-reviewer` (`laravel`) owns Laravel authorization/tenancy, Eloquent lifecycle, commit-aware queue dispatch, retry effects, configuration caching and worker reuse.
+- `django-reviewer` (`django`) owns Django/DRF queries, effective permissions, transactions, historical migrations, async boundaries and configuration.
+- `spring-reviewer` (`spring` or `spring-boot`) owns Java/Kotlin Spring proxies, transaction/rollback behavior, persistence, security and bean/reactive lifecycle.
+
+Use the installed version and effective configuration, not blanket rules about missing annotations, indexes, DTOs or preferred architectural layers. Nearest manifest boundaries and extension metadata support nested projects and configuration-only changes; detection is lexical, not full dependency resolution. Explicitly select a known framework when parent BOMs, remote catalogs or generated configuration obscure the local signal. Do not execute project code to profile it.
 
 ## Durable results, CI, and cloud runners
 

@@ -1,0 +1,1 @@
+Django 5.2 and DRF 3.16 application excerpt. Item rows are private to their owner, including their title. The router exposes both list and detail actions of ItemViewSet. There is no global tenant/queryset filtering. Authentication is already configured normally.
