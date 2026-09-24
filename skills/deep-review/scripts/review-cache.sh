@@ -9,9 +9,12 @@ refresh_review_cache() {
   signature="$(
     {
       cksum "$SCRIPT_DIR/deep-review-engine.sh" "$SCRIPT_DIR/review-cache.sh"
+      cksum "$SCRIPT_DIR/backend-stack-detection.sh" "$SKILL_DIR/support/framework-review.md"
       cksum "$SKILL_DIR/support/architecture-review.md" "$SKILL_DIR/support/architecture-context.md"
       cksum "$SKILL_DIR/support/finding-validation.md" "$SCRIPT_DIR/architecture-evidence.py"
       cksum "$STACK_PROFILER" "$AGENT_DIR/synthesizer.md"
+      # Direct Java review can load the Spring knowledge without a separate session.
+      case " $AGENTS " in *' java-reviewer '*) cksum "$AGENT_DIR/spring-reviewer.md" ;; esac
       cksum <"$ARCH_EVIDENCE_FILE"
       for file in $AGENTS; do cksum "$AGENT_DIR/$file.md"; done
     } | cksum | awk '{print $1 "-" $2}'
