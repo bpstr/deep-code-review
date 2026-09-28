@@ -5,6 +5,8 @@ case "$provider" in
   codex) real="${DEEP_REVIEW_REAL_CODEX:-}" ;;
   claude) real="${DEEP_REVIEW_REAL_CLAUDE:-}" ;;
   copilot) real="${DEEP_REVIEW_REAL_COPILOT:-}" ;;
+  grok) real="${DEEP_REVIEW_REAL_GROK:-}" ;;
+  gemini) real="${DEEP_REVIEW_REAL_GEMINI:-}" ;;
   *) echo "Unknown provider shim: $provider" >&2; exit 127 ;;
 esac
 [ -n "$real" ] || { echo "Provider '$provider' is unavailable." >&2; exit 127; }
