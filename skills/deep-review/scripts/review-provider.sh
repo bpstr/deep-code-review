@@ -3,8 +3,8 @@
 # Installation, credentials, model names and skill paths do NOT identify the caller.
 deep_review_provider_name() {
   case "$1" in
-    codex|claude|copilot|grok|gemini) printf '%s\n' "$1" ;;
-    *) echo "Unsupported provider '$1'. Use codex, claude, copilot, grok, or gemini; no fallback is permitted." >&2; return 2 ;;
+    codex|claude|copilot|grok|gemini|muse) printf '%s\n' "$1" ;;
+    *) echo "Unsupported provider '$1'. Use codex, claude, copilot, grok, gemini, or muse; no fallback is permitted." >&2; return 2 ;;
   esac
 }
 
@@ -30,6 +30,6 @@ deep_review_resolve_provider() {
   fi
   if [ -n "${CLAUDECODE:-}" ]; then printf 'claude\n'; return 0; fi
   if [ -n "${CODEX_THREAD_ID:-}" ]; then printf 'codex\n'; return 0; fi
-  echo 'Cannot identify the invoking CLI. Set DEEP_REVIEW_CALLER or --provider (codex|claude|copilot|grok|gemini). Installed CLIs are not a fallback.' >&2
+  echo 'Cannot identify the invoking CLI. Set DEEP_REVIEW_CALLER or --provider (codex|claude|copilot|grok|gemini|muse). Installed CLIs are not a fallback.' >&2
   return 2
 }

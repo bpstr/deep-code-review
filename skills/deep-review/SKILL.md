@@ -1,6 +1,6 @@
 ---
 name: deep-review
-description: Run comprehensive multi-agent code reviews with isolated specialists, shared stack/version context, automatic stack-aware routing, synthesis, confidence scoring, and P0/P1/P2 prioritization. Use for deep or pre-merge reviews, production-readiness and architecture audits, security, performance or optimization passes, test quality/realism/gaps, packaging boundaries, and operational failure analysis, including CI review gates. Uses the invoking client's native CLI: Codex, Claude Code, GitHub Copilot, Grok Build, or Gemini CLI; never silently switches providers.
+description: Run comprehensive multi-agent code reviews with isolated specialists, shared stack/version context, automatic stack-aware routing, synthesis, confidence scoring, and P0/P1/P2 prioritization. Use for deep or pre-merge reviews, production-readiness and architecture audits, security, performance or optimization passes, test quality/realism/gaps, packaging boundaries, and operational failure analysis, including CI review gates. Uses the invoking client's native CLI: Codex, Claude Code, GitHub Copilot, Grok Build, Gemini CLI, or Meta Muse Code; never silently switches providers.
 argument-hint: "[aspects] [--pr|--branch|--changes|path]"
 ---
 
@@ -10,7 +10,7 @@ Run Deep Code Review for the user; do not ask them to locate or execute the bund
 
 ## Execution
 
-Resolve `SKILL_DIR` as the directory containing this `SKILL.md`. Identify the actual client hosting this skill, not the model name, skill installation path, API keys, or whichever executable happens to be installed. Set `CALLER_PROVIDER` to that client's canonical ID: Codex → `codex`, Claude Code → `claude`, GitHub Copilot CLI → `copilot`, Grok Build → `grok`, Gemini CLI → `gemini`.
+Resolve `SKILL_DIR` as the directory containing this `SKILL.md`. Identify the actual client hosting this skill, not the model name, skill installation path, API keys, or whichever executable happens to be installed. Set `CALLER_PROVIDER` to that client's canonical ID: Codex → `codex`, Claude Code → `claude`, GitHub Copilot CLI → `copilot`, Grok Build → `grok`, Gemini CLI → `gemini`, Meta Muse Code → `muse`.
 
 Bind that identity on **every invocation**, including retries and the examples below:
 
@@ -18,7 +18,7 @@ Bind that identity on **every invocation**, including retries and the examples b
 DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" [scope] [aspects...]
 ```
 
-A Grok-hosted review must launch `grok`, a Claude-hosted review must launch `claude`, and likewise for the other supported clients. This applies to shared profiling, every specialist, synthesis, extraction, confidence scoring, and final triage—not just the first stage. Do not invoke Codex tasks from another client merely because Codex is available.
+A Grok-hosted review must launch `grok`, a Claude-hosted review must launch `claude`, a Meta Muse Code-hosted review must launch `muse exec`, and likewise for the other supported clients. This applies to shared profiling, every specialist, synthesis, extraction, confidence scoring, and final triage—not just the first stage. Do not invoke Codex tasks from another client merely because Codex is available. Muse can discover skills from Codex/Claude directories; their location does not change its caller identity.
 
 An explicit user `--provider` takes precedence, followed by `DEEP_REVIEW_PROVIDER`; otherwise `auto` uses the bound caller. Do not add a cross-provider override yourself. The runner recognizes unambiguous native Claude/Codex session markers as a compatibility aid, but the skill must still bind its current client explicitly because inherited outer-session markers can be stale. Unknown, conflicting, or unsupported caller identities fail with an actionable error. Missing executables, authentication failures, rate limits, and unsupported CLI flags must never cause a retry with a different provider. Report the limitation instead. See [provider selection](support/provider-selection.md).
 
@@ -32,7 +32,7 @@ Preserve the user's target file/directory. Forward it as `--target PATH` (an exi
 
 The runner discovers Git from the target directory or a file's parent. It uses that worktree's root when available; without Git it uses the target directory or file's parent. With no target and no Git it reviews the invocation directory as a path. Explicit branch/changes scopes require Git.
 
-Local runs default to `<resolved-root>/.deep-review/` for unique reports and `latest.md`, independent of provider. Do not override this to `.codex`, `.claude`, or the installation directory unless the user explicitly requests that destination. Explicit output overrides and CI/cloud storage remain supported; recovery state and machine-local provider slots stay separate. See [output storage](support/output-storage.md) for resolution examples, overrides, exclusions and privacy.
+Local runs default to `<resolved-root>/.deep-review/` for unique reports and `latest.md`, independent of provider. Do not override this to `.codex`, `.claude`, `.muse`, or the installation directory unless the user explicitly requests that destination. Explicit output overrides and CI/cloud storage remain supported; recovery state and machine-local provider slots stay separate. See [output storage](support/output-storage.md) for resolution examples, overrides, exclusions and privacy.
 
 ## Intent mapping
 

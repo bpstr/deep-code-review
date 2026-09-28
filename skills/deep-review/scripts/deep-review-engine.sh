@@ -50,7 +50,7 @@ Any reviewer filename under agents/ can also be used directly, for example:
   resource-lifecycle-reviewer
 
 Options:
-  --provider codex|claude|copilot|grok|gemini|auto
+  --provider codex|claude|copilot|grok|gemini|muse|auto
                                  Agent CLI provider (default: auto: invoking client)
   --model MODEL                  Model for review/synthesis agents
   --fast-model MODEL             Model for confidence scoring and stack profiling
@@ -491,6 +491,17 @@ Copilot execution constraints: Create the requested review artifacts with native
       --include-directories "$SKILL_DIR" --include-directories "$REVIEW_DIR")
     [ -z "$model" ] || gemini_args+=(--model "$model")
     exec gemini "${gemini_args[@]}"
+  elif [ "$PROVIDER" = muse ]; then
+    # Muse has an exec subcommand with a positional prompt, not Claude's -p.
+    # Keep the OS sandbox; do not automatically trust project hooks or reuse a
+    # retained Muse session. Deep Review owns stage recovery independently.
+    muse_prompt="$prompt
+
+Muse execution constraints: Review root is $ROOT_DIR. Read the absolute instruction and artifact paths above; use sandboxed shell inspection when native file tools are workspace-confined. Write only the requested review artifacts under $REVIEW_DIR, using sandboxed shell writes for this temporary directory when needed. Do not modify source files, run project scripts/tests/installers, or invoke MCP tools. If workspace trust, sandbox, or managed policy blocks an operation, report the limitation; do not weaken the policy or switch providers."
+    muse_args=(exec --disable-approval --no-session-log --workspace "$ROOT_DIR")
+    [ -z "$model" ] || muse_args+=(--model "$model")
+    # Keep the prompt last: the lifecycle shim uses the same positional contract.
+    exec muse "${muse_args[@]}" "$muse_prompt"
   elif [ "$PROVIDER" = claude ]; then
     unset CLAUDECODE 2>/dev/null || true
     if [ -n "$model" ]; then

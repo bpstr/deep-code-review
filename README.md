@@ -1,6 +1,6 @@
 # Deep Code Review
 
-Deep Code Review is a comprehensive multi-agent code review system for **OpenAI Codex**, **Claude Code**, **GitHub Copilot CLI**, **Grok Build**, and **Gemini CLI**.
+Deep Code Review is a comprehensive multi-agent code review system for **OpenAI Codex**, **Claude Code**, **GitHub Copilot CLI**, **Grok Build**, **Gemini CLI**, and **Meta Muse Code**.
 
 Instead of asking one model to review everything in one context, it runs focused specialist reviewers, synthesizes their findings, independently confidence-scores them, and produces a final P0/P1/P2 report.
 
@@ -31,9 +31,10 @@ The repository also includes a native Codex plugin manifest. See [`INSTALL.md`](
 ## The invoking client owns the review
 
 A review invoked inside Grok runs **Grok CLI**, not Codex. Claude uses Claude CLI,
-Gemini uses Gemini CLI, and the same rule applies to Codex and Copilot. The skill
-binds `DEEP_REVIEW_CALLER` on every invocation; profiling, all specialists,
-synthesis, extraction, confidence scoring, and final triage keep that one provider.
+Gemini uses Gemini CLI, Meta Muse Code uses **`muse exec`**, and the same rule applies
+to Codex and Copilot. The skill binds `DEEP_REVIEW_CALLER` on every invocation;
+profiling, all specialists, synthesis, extraction, confidence scoring, and final
+triage keep that one provider.
 
 Explicit `--provider` wins over `DEEP_REVIEW_PROVIDER`; otherwise `auto` resolves
 the bound caller (or an unambiguous native Claude/Codex session marker). Installed
@@ -47,6 +48,7 @@ A normal terminal has no agent identity. Select the intended CLI explicitly:
 ./scripts/deep-review.sh --provider grok --target /projects/app full
 ./scripts/deep-review.sh --provider claude --changes tests
 ./scripts/deep-review.sh --provider gemini --target /projects/app arch
+./scripts/deep-review.sh --provider muse --target /projects/app full
 ```
 
 Bare runner examples below assume a bound caller or an explicitly configured
@@ -55,6 +57,12 @@ optional and are passed only to that provider. Reports remain provider-neutral a
 `<resolved-target-root>/.deep-review/`; this change does not restore `.codex` output.
 Refresh existing skill installations to pick up both the scripts and `SKILL.md`.
 See [provider selection and migration](skills/deep-review/support/provider-selection.md).
+
+Muse runs use the native headless `exec` subcommand with sandbox-preserving
+`--disable-approval`, `--no-session-log`, and the resolved `--workspace`. Each stage
+starts fresh; Deep Review owns checkpoint recovery. No `--yolo`, automatic
+workspace trust, or Codex-backed Muse model substitution is used. Authenticate
+Muse separately before reviewing; this runner does not change Muse settings.
 
 ## Why use it?
 
@@ -174,8 +182,8 @@ Deep Code Review has intentionally separate web layers:
 - **TypeScript frontend (`ts-frontend`)** — browser/frontend TypeScript, TSConfig, boundaries, browser APIs, routing, generic component/state concerns.
 - **TypeScript backend (`ts-backend`)** — Node/server TypeScript, runtime validation, event-loop safety, API/lifecycle concerns.
 - **React (`react`)** — purity, hooks/effects, state identity, async waterfalls, React Compiler-aware performance, Suspense/recovery, and dependency-aware React Router/TanStack Query checks.
-- **Vite (`vite`)** — environment exposure, dev-server security, module resolution, plugin cost, dependency pre-bundling, build output, assets, and SPA deployment.
-- **Web testing (`web-testing`)** — test isolation, mocks/timers, Testing Library semantics, Playwright locators/auto-waiting, deterministic async behavior and meaningful coverage.
+- **Vite (`vite`)** — environment exposure, dev-server security, module resolution, plugin cost, dependency pre-bundling, build assets, and SPA deployment.
+- **Web testing (`web-testing`)** — test isolation, mocks/timers, Testing Library, Playwright locators/auto-waiting, deterministic async behavior and meaningful coverage.
 - **JavaScript packages (`js-package`)** — Node `type`/`exports`/`imports`, conditional exports, types/runtime parity, peer dependencies, `sideEffects`, published files and workspace boundaries.
 - **Accessibility (`a11y`)** — semantic HTML, keyboard/focus, dynamic content, WCAG 2.2 and assistive-technology impact.
 

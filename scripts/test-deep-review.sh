@@ -13,7 +13,7 @@ bash -n scripts/test-provider-lifecycle.sh
 bash -n scripts/test-copilot-provider.sh
 
 output="$(bash skills/deep-review/scripts/deep-review.sh --help)"
-grep -q -- '--provider codex|claude|copilot|grok|gemini|auto' <<<"$output"
+grep -q -- '--provider codex|claude|copilot|grok|gemini|muse|auto' <<<"$output"
 grep -q -- 'DEEP_REVIEW_CALLER' <<<"$output"
 grep -q -- '--changes' <<<"$output"
 grep -q -- '--no-auto-specialists' <<<"$output"

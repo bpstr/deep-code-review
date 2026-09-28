@@ -7,12 +7,14 @@ case "$provider" in
   copilot) real="${DEEP_REVIEW_REAL_COPILOT:-}" ;;
   grok) real="${DEEP_REVIEW_REAL_GROK:-}" ;;
   gemini) real="${DEEP_REVIEW_REAL_GEMINI:-}" ;;
+  muse) real="${DEEP_REVIEW_REAL_MUSE:-}" ;;
   *) echo "Unknown provider shim: $provider" >&2; exit 127 ;;
 esac
 [ -n "$real" ] || { echo "Provider '$provider' is unavailable." >&2; exit 127; }
 
 prompt=""
-if [ "$provider" = codex ]; then
+if [ "$provider" = codex ] || [ "$provider" = muse ]; then
+  # The engine places the positional exec prompt after every option.
   for arg in "$@"; do prompt="$arg"; done
 else
   want_prompt=0
