@@ -6,6 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/review-paths.sh"
+. "$SCRIPT_DIR/review-provider.sh"
 
 usage() {
   cat <<'USAGE'
@@ -49,8 +50,8 @@ Any reviewer filename under agents/ can also be used directly, for example:
   resource-lifecycle-reviewer
 
 Options:
-  --provider codex|claude|copilot|auto
-                                 Agent CLI provider (default: auto: codex, then claude)
+  --provider codex|claude|copilot|grok|gemini|auto
+                                 Agent CLI provider (default: auto: invoking client)
   --model MODEL                  Model for review/synthesis agents
   --fast-model MODEL             Model for confidence scoring and stack profiling
   --base REF                     Base branch/ref for branch review
@@ -62,6 +63,9 @@ Options:
   -h, --help                     Show help
 
 Environment:
+  DEEP_REVIEW_PROVIDER sets an explicit provider (overridden by --provider).
+  DEEP_REVIEW_CALLER identifies the invoking CLI for auto selection.
+  Unknown/ambiguous callers fail; installed CLIs are never a fallback.
   DEEP_REVIEW_AUTO_SPECIALISTS=0 disables full-review specialist detection.
   CONFIDENCE_THRESHOLD=0..100 controls the final confidence filter (default: 80).
   DEEP_REVIEW_SCORE_BATCH_SIZE controls findings per confidence call (default: 4).
@@ -140,20 +144,13 @@ if [ "$CI_MODE" -eq 1 ]; then
 fi
 export DEEP_REVIEW_CI="$CI_MODE"
 
-case "$PROVIDER" in
-  auto)
-    if command -v codex >/dev/null 2>&1; then PROVIDER=codex
-    elif command -v claude >/dev/null 2>&1; then PROVIDER=claude
-    else echo "Neither 'codex' nor 'claude' is installed." >&2; exit 127
-    fi
-    ;;
-  codex|claude|copilot)
-    if [ "$CI_MODE" -ne 1 ]; then
-      command -v "$PROVIDER" >/dev/null 2>&1 || { echo "Provider '$PROVIDER' is not installed." >&2; exit 127; }
-    fi
-    ;;
-  *) echo "Unsupported provider: $PROVIDER" >&2; exit 2 ;;
-esac
+PROVIDER="$(deep_review_resolve_provider "$PROVIDER")" || exit $?
+if [ "$CI_MODE" -ne 1 ]; then
+  command -v "$PROVIDER" >/dev/null 2>&1 || {
+    echo "Provider '$PROVIDER' is not installed. No fallback will be used." >&2
+    exit 127
+  }
+fi
 
 case "$MAX_CONCURRENT" in *[!0-9]*|'') echo "MAX_CONCURRENT must be a positive integer." >&2; exit 2;; esac
 [ "$MAX_CONCURRENT" -gt 0 ] || { echo "MAX_CONCURRENT must be positive." >&2; exit 2; }
@@ -408,7 +405,7 @@ for agent in $AGENTS; do
       ;;
   esac
   case "$agent" in
-    react-reviewer|vite-reviewer|web-testing-reviewer|js-package-reviewer|ts-frontend-reviewer|ts-backend-reviewer|nextjs-reviewer|vue-reviewer|angular-reviewer|svelte-reviewer|react-native-reviewer|go-reviewer|rust-reviewer|python-reviewer|django-reviewer|php-reviewer|ruby-reviewer|rails-reviewer|java-reviewer|kotlin-server-reviewer|scala-reviewer|dotnet-reviewer|cpp-reviewer|elixir-reviewer|flutter-reviewer|ios-platform-reviewer|macos-platform-reviewer|android-platform-reviewer|swift-data-reviewer)
+    react-reviewer|vite-reviewer|web-testing-reviewer|js-package-reviewer|ts-frontend-reviewer|ts-backend-reviewer|nextjs-reviewer|vue-reviewer|angular-reviewer|svelte-reviewer|react-native-reviewer|go-reviewer|rust-reviewer|python-reviewer|django-reviewer|php-reviewer|ruby-reviewer|rails-reviewer|java-reviewer|kotlin-server-reviewer|scala-reviewer|dotnet-reviewer|cpp-reviewer|elixir-reviewer|flutter-reviewer|ios-platform-reviewer|macos-platform-reviewer|swift-data-reviewer|android-platform-reviewer)
       NEEDS_STACK_PROFILE=1
       ;;
   esac
@@ -458,7 +455,7 @@ run_provider_background() {
       exec codex exec --ephemeral --sandbox workspace-write --add-dir "$REVIEW_DIR" --skip-git-repo-check "$prompt"
     fi
   elif [ "$PROVIDER" = copilot ]; then
-    # Copilot is explicitly selected; it never changes the historical auto order.
+    # Copilot uses its own native CLI, just like every other selected provider.
     # Native file tools write pipeline artifacts. These CLI permissions are not an
     # OS sandbox or a guarantee that repository files cannot be modified. Keep
     # execution on a trusted, disposable runner and do not approve source scripts.
@@ -479,13 +476,31 @@ Copilot execution constraints: Create the requested review artifacts with native
     )
     [ -z "$model" ] || copilot_args+=(--model "$model")
     exec copilot "${copilot_args[@]}"
-  else
+  elif [ "$PROVIDER" = grok ]; then
+    # Native Grok Build headless execution, not Codex with a Grok model name.
+    # The read-only profile allows temporary artifact writes. Do not bypass an
+    # unavailable sandbox or managed permission policy; report the stage failure.
+    grok_args=(-p "$prompt" --no-auto-update --sandbox read-only
+      --allowedTools "Bash,Read,Write,Edit,Glob,Grep")
+    [ -z "$model" ] || grok_args+=(--model "$model")
+    exec grok "${grok_args[@]}"
+  elif [ "$PROVIDER" = gemini ]; then
+    # Permit native artifact edits, not blanket shell approval. Folder-trust and
+    # managed policies remain in force; no --yolo or session-resume fallback.
+    gemini_args=(-p "$prompt" --approval-mode auto_edit
+      --include-directories "$SKILL_DIR" --include-directories "$REVIEW_DIR")
+    [ -z "$model" ] || gemini_args+=(--model "$model")
+    exec gemini "${gemini_args[@]}"
+  elif [ "$PROVIDER" = claude ]; then
     unset CLAUDECODE 2>/dev/null || true
     if [ -n "$model" ]; then
       exec claude -p "$prompt" --allowedTools "Bash,Read,Write,Glob,Grep" --model "$model"
     else
       exec claude -p "$prompt" --allowedTools "Bash,Read,Write,Glob,Grep"
     fi
+  else
+    echo "Unsupported provider: $PROVIDER; no fallback is permitted." >&2
+    exit 2
   fi
 }
 
