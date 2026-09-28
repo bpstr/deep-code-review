@@ -50,7 +50,7 @@ class ReviewPaths(unittest.TestCase):
         self.skill = self.root / "installed skill"
         scripts = self.skill / "scripts"
         scripts.mkdir(parents=True)
-        for name in ("deep-review.sh", "deep-review-engine.sh", "review-paths.sh",
+        for name in ("deep-review.sh", "deep-review-engine.sh", "review-paths.sh", "review-provider.sh",
                      "deep-review-provider-shim.sh", "deep-review-mktemp-shim.sh", "review-cache.sh"):
             shutil.copy2(SOURCE / name, scripts / name)
         for name in ("agents/code-reviewer.md", "agents/synthesizer.md",
@@ -155,7 +155,8 @@ class ReviewPaths(unittest.TestCase):
         self.assertFalse((self.caller / ".deep-review").exists())
 
     def test_no_arguments_without_git(self):
-        result = self.invoke(self.plain, self.plain)
+        # No CLI arguments still works when invoked by an identified hosting client.
+        result = self.invoke(self.plain, self.plain, env={"DEEP_REVIEW_CALLER": "codex"})
         self.assert_export(self.plain, result.stdout)
         self.assertEqual((self.latest(self.plain) / "changed-files.txt").read_text(), ".\n")
 
