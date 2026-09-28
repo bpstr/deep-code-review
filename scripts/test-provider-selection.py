@@ -10,6 +10,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+BASH = os.environ.get("BASH_TEST", "/bin/bash")
 PROVIDERS = ("codex", "claude", "copilot", "grok", "gemini")
 MOCK = r'''#!/usr/bin/env python3
 import json, os, pathlib, re, sys
@@ -64,7 +65,7 @@ class ProviderSelection(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="deep-review-provider-test-")
         self.addCleanup(self.temp.cleanup)
-        self.base = Path(self.temp.name)
+        self.base = Path(self.temp.name).resolve()
         self.skill = self.base / "installed skill"
         shutil.copytree(ROOT / "skills/deep-review/scripts", self.skill / "scripts")
         # Prompt content is deliberately stubbed: these tests exercise orchestration,
@@ -105,7 +106,7 @@ class ProviderSelection(unittest.TestCase):
     def run_review(self, *args, direct=False, env=None):
         script = "deep-review-engine.sh" if direct else "deep-review.sh"
         return subprocess.run(
-            ["bash", str(self.skill / "scripts" / script), "--target", str(self.target),
+            [BASH, str(self.skill / "scripts" / script), "--target", str(self.target),
              "--max-concurrent", "2", "--model", "review model", "--fast-model",
              "fast model", "code", "python", *args], cwd=self.base,
             env=dict(self.env, **(env or {})), text=True, capture_output=True, timeout=25)
