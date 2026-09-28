@@ -22,6 +22,14 @@ Use `--provider copilot` for GitHub Copilot CLI. Copilot is an explicit provider
 
 The final Markdown report is both returned on stdout and persisted as `artifacts/review.md`. When the caller can surface stdout to the user, show the report directly rather than only pointing to the saved file.
 
+## Targets and local reports
+
+Preserve the user's target file/directory. Forward it as `--target PATH` (an existing positional path is also supported); do not substitute `.` or assume the caller's working directory or the skill installation directory is the target repository. For another target's branch or changes, place the scope flag after the target, for example `--target /projects/app --changes tests`.
+
+The runner discovers Git from the target directory or a file's parent. It uses that worktree's root when available; without Git it uses the target directory or file's parent. With no target and no Git it reviews the invocation directory as a path. Explicit branch/changes scopes require Git.
+
+Local runs default to `<resolved-root>/.deep-review/` for unique reports and `latest.md`, independent of provider. Do not override this to `.codex`, `.claude`, or the installation directory unless the user explicitly requests that destination. Explicit output overrides and CI/cloud storage remain supported; recovery state and machine-local provider slots stay separate. See [output storage](support/output-storage.md) for resolution examples, overrides, exclusions and privacy.
+
 ## Intent mapping
 
 Translate natural-language requests into the narrowest useful review set:
@@ -170,7 +178,7 @@ Persistent state and exported reports can contain proprietary source references 
 
 ## Output
 
-Present the final P0/P1/P2 report produced by the runner to the user and mention the saved result path when it is available. Mention review gaps if any specialist or shared stack profiling failed. Do not automatically fix findings unless the user explicitly asks for fixes.
+Present the final P0/P1/P2 report produced by the runner to the user and mention the saved result path when it is available. Prefer the unique `Exported review result` path when present; otherwise use `Saved review result`. Do not invent an engine-specific result path. Mention review gaps if any specialist or shared stack profiling failed. Do not automatically fix findings unless the user explicitly asks for fixes.
 
 ## Architecture and antipattern reviews
 

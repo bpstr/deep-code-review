@@ -6,12 +6,14 @@ umask 077
 # Keep compatible with Bash 3.2 (default Bash on macOS).
 
 RUNNER_VERSION="1.2.0"
-RUNNER_SCHEMA="4"
+RUNNER_SCHEMA="5"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENGINE="$SCRIPT_DIR/deep-review-engine.sh"
 PROVIDER_SHIM_SOURCE="$SCRIPT_DIR/deep-review-provider-shim.sh"
 MKTEMP_SHIM_SOURCE="$SCRIPT_DIR/deep-review-mktemp-shim.sh"
 CI_HELPER="$SCRIPT_DIR/deep-review-ci.py"
+. "$SCRIPT_DIR/review-paths.sh"
+INVOCATION_DIR="$(pwd -P)"
 
 usage_extra() {
   cat <<'USAGE'
@@ -21,9 +23,9 @@ Durability, output, and resource controls:
   --fail-on none|p0|p1|p2      CI gate: NEW findings at this priority or higher (default: none)
   --no-resume                 Never resume a matching interrupted run
   --artifacts-dir DIR         Persistent recovery/artifact root
-  --results-dir DIR           Also export completed reports into DIR
+  --results-dir DIR           Export reports into DIR (local default: ROOT/.deep-review)
   --output FILE               Also export the completed report to FILE atomically
-  --list-runs                 List saved runs for this repository and exit
+  --list-runs                 List saved runs for the resolved target root and exit
   --latest-artifacts          Print the latest saved artifact directory and exit
   --latest-result             Print the latest saved final report path and exit
   --version                   Print Deep Code Review version and exit
@@ -38,6 +40,11 @@ Environment:
   DEEP_REVIEW_KEEP_COMPLETED_RUNS     Completed runs retained per repository (default: 20; 0 = unlimited).
   DEEP_REVIEW_ALLOW_MEMORY_OVERSUBSCRIBE=1 keeps an explicitly requested concurrency above the safe estimate.
   DEEP_REVIEW_SCORE_BATCH_SIZE        Findings validated per fast confidence call (default: 4).
+
+Local reports default to the resolved target root/.deep-review, not the caller's
+working directory. An explicit --output or --results-dir overrides this default.
+CI/cloud runs keep their existing storage policy and require explicit exports.
+Relative output/state overrides are resolved from the invocation directory.
 
 State defaults are cloud-safe: explicit DEEP_REVIEW_STATE_DIR wins, then XDG state,
 then a job-local temp root in CI/cloud runners, then HOME, then a private /tmp fallback.
@@ -136,6 +143,8 @@ FINGERPRINT_ARGS=()
 FINGERPRINT_SCOPE_MODE=branch
 FINGERPRINT_SCOPE_PATH=""
 FINGERPRINT_PATH_SET=0
+SCOPE_EXPLICIT=0
+RESULTS_DEFAULT=0
 CI_MODE=0
 FAIL_ON=none
 FAIL_ON_SET=0
@@ -162,6 +171,23 @@ while [ "$#" -gt 0 ]; do
       FINGERPRINT_ARGS+=("$1" "$2")
       shift 2
       ;;
+    --model|--fast-model)
+      [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "$1 requires a value." >&2; exit 2; }
+      ENGINE_ARGS+=("$1" "$2")
+      FINGERPRINT_ARGS+=("$1" "$2")
+      shift 2
+      ;;
+    --target)
+      [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "--target requires a path." >&2; exit 2; }
+      [ "$FINGERPRINT_PATH_SET" -eq 0 ] || { echo "Only one review target is supported." >&2; exit 2; }
+      FINGERPRINT_SCOPE_PATH="$(deep_review_absolute_target "$2")"
+      FINGERPRINT_SCOPE_MODE=path
+      FINGERPRINT_PATH_SET=1
+      SCOPE_EXPLICIT=1
+      ENGINE_ARGS+=(--target "$FINGERPRINT_SCOPE_PATH")
+      FINGERPRINT_ARGS+=(--target "$FINGERPRINT_SCOPE_PATH")
+      shift 2
+      ;;
     --version)
       printf 'Deep Code Review %s\n' "$RUNNER_VERSION"
       exit 0
@@ -171,18 +197,18 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
     --artifacts-dir)
-      [ "$#" -ge 2 ] || { echo "--artifacts-dir requires a directory." >&2; exit 2; }
+      [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "--artifacts-dir requires a directory." >&2; exit 2; }
       ARTIFACT_BASE="$2"
       ARTIFACT_EXPLICIT=1
       shift 2
       ;;
     --results-dir)
-      [ "$#" -ge 2 ] || { echo "--results-dir requires a directory." >&2; exit 2; }
+      [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "--results-dir requires a directory." >&2; exit 2; }
       RESULTS_DIR="$2"
       shift 2
       ;;
     --output)
-      [ "$#" -ge 2 ] || { echo "--output requires a file path." >&2; exit 2; }
+      [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "--output requires a file path." >&2; exit 2; }
       RESULT_FILE="$2"
       shift 2
       ;;
@@ -217,12 +243,14 @@ while [ "$#" -gt 0 ]; do
       ;;
     --pr|--branch)
       FINGERPRINT_SCOPE_MODE=branch
+      SCOPE_EXPLICIT=1
       ENGINE_ARGS+=("$1")
       FINGERPRINT_ARGS+=("$1")
       shift
       ;;
     --changes)
       FINGERPRINT_SCOPE_MODE=changes
+      SCOPE_EXPLICIT=1
       ENGINE_ARGS+=("$1")
       FINGERPRINT_ARGS+=("$1")
       shift
@@ -235,15 +263,35 @@ while [ "$#" -gt 0 ]; do
     *)
       if [ "$FINGERPRINT_PATH_SET" -eq 0 ] && [ -e "$1" ]; then
         FINGERPRINT_SCOPE_MODE=path
-        FINGERPRINT_SCOPE_PATH="$1"
+        FINGERPRINT_SCOPE_PATH="$(deep_review_absolute_target "$1")"
         FINGERPRINT_PATH_SET=1
+        SCOPE_EXPLICIT=1
+        ENGINE_ARGS+=(--target "$FINGERPRINT_SCOPE_PATH")
+        FINGERPRINT_ARGS+=(--target "$FINGERPRINT_SCOPE_PATH")
+      else
+        ENGINE_ARGS+=("$1")
+        FINGERPRINT_ARGS+=("$1")
       fi
-      ENGINE_ARGS+=("$1")
-      FINGERPRINT_ARGS+=("$1")
       shift
       ;;
   esac
 done
+
+deep_review_resolve_scope "$FINGERPRINT_SCOPE_PATH" "$FINGERPRINT_SCOPE_MODE" "$SCOPE_EXPLICIT"
+FINGERPRINT_SCOPE_PATH="$REVIEW_SCOPE_PATH"
+FINGERPRINT_SCOPE_MODE="$REVIEW_SCOPE_MODE"
+ARTIFACT_BASE="$(deep_review_absolute_output "$ARTIFACT_BASE" "$INVOCATION_DIR")"
+SLOT_BASE="$(deep_review_absolute_output "$SLOT_BASE" "$INVOCATION_DIR")"
+if [ -z "$RESULTS_DIR" ] && [ -z "$RESULT_FILE" ] && [ "$CI_MODE" -eq 0 ] && ! is_ci_environment; then
+  RESULTS_DIR="${ROOT_DIR%/}/.deep-review"
+  RESULTS_DEFAULT=1
+fi
+[ -z "$RESULTS_DIR" ] || RESULTS_DIR="$(deep_review_absolute_output "$RESULTS_DIR" "$INVOCATION_DIR")"
+[ -z "$RESULT_FILE" ] || RESULT_FILE="$(deep_review_absolute_output "$RESULT_FILE" "$INVOCATION_DIR")"
+if [ "$RESULTS_DEFAULT" -eq 1 ] && [ -L "$RESULTS_DIR" ]; then
+  echo "Default .deep-review directory must not be a symlink: $RESULTS_DIR" >&2
+  exit 1
+fi
 
 case "$FAIL_ON" in none|p0|p1|p2) ;; *) echo "--fail-on must be none, p0, p1, or p2." >&2; exit 2;; esac
 [ "$FAIL_ON_SET" -eq 0 ] || [ "$CI_MODE" -eq 1 ] || { echo "--fail-on requires --ci." >&2; exit 2; }
@@ -257,8 +305,6 @@ if [ "$CI_MODE" -eq 1 ]; then
   RESUME=0
 fi
 
-ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-ROOT_DIR="$(cd "$ROOT_DIR" && pwd)"
 REPO_KEY="$(printf '%s\n' "$ROOT_DIR" | cksum | awk '{print $1 "-" $2}')"
 REPO_STATE="$ARTIFACT_BASE/repos/$REPO_KEY"
 RUNS_DIR="$REPO_STATE/runs"
@@ -364,7 +410,7 @@ fi
 # without changing the semantic run fingerprint, so interrupted work can resume after
 # lowering resource pressure.
 if git -C "$ROOT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
-  TRACKED_FILES="$(git -C "$ROOT_DIR" ls-files 2>/dev/null | wc -l | tr -d ' ')"
+  TRACKED_FILES="$(git -C "$ROOT_DIR" ls-files -- . "$DEEP_REVIEW_GIT_EXCLUDE" 2>/dev/null | wc -l | tr -d ' ')"
 else
   TRACKED_FILES=0
 fi
@@ -398,7 +444,7 @@ esac
 
 hash_untracked_path() {
   pathspec="$1"
-  git -C "$ROOT_DIR" ls-files --others --exclude-standard -- "$pathspec" 2>/dev/null | while IFS= read -r file; do
+  git -C "$ROOT_DIR" ls-files -z --others --exclude-standard -- ":(literal)$pathspec" "$DEEP_REVIEW_GIT_EXCLUDE" 2>/dev/null | while IFS= read -r -d '' file; do
     [ -n "$file" ] || continue
     printf 'untracked=%s:' "$file"
     git -C "$ROOT_DIR" hash-object -- "$file" 2>/dev/null || true
@@ -414,7 +460,7 @@ fingerprint_stream() {
     "$RUNNER_SCHEMA" "$RUNNER_VERSION" "$ROOT_DIR" "$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || echo no-head)" \
     "$RESOLVED_PROVIDER" "${REVIEW_MODEL:-}" "${DEEP_REVIEW_FAST_MODEL:-}" "${CONFIDENCE_THRESHOLD:-80}" "$SCORE_BATCH_SIZE" \
     "${DEEP_REVIEW_AUTO_SPECIALISTS:-1}" "${REVIEW_BASE:-}" "$FINGERPRINT_SCOPE_MODE" "$FINGERPRINT_SCOPE_PATH"
-  for arg in "${FINGERPRINT_ARGS[@]}"; do printf 'arg=%s\n' "$arg"; done
+  for arg in ${FINGERPRINT_ARGS[@]+"${FINGERPRINT_ARGS[@]}"}; do printf 'arg=%s\n' "$arg"; done
 
   case "$FINGERPRINT_SCOPE_MODE" in
     branch)
@@ -422,13 +468,17 @@ fingerprint_stream() {
       ;;
     changes)
       # HEAD already captures staged + unstaged tracked changes.
-      git -C "$ROOT_DIR" diff --no-ext-diff HEAD 2>/dev/null || true
+      git -C "$ROOT_DIR" diff --no-ext-diff HEAD -- . "$DEEP_REVIEW_GIT_EXCLUDE" 2>/dev/null || true
       ;;
     path)
-      git -C "$ROOT_DIR" status --porcelain=v1 -- "$FINGERPRINT_SCOPE_PATH" 2>/dev/null || true
-      git -C "$ROOT_DIR" diff --no-ext-diff HEAD -- "$FINGERPRINT_SCOPE_PATH" 2>/dev/null || true
-      git -C "$ROOT_DIR" diff --no-ext-diff --cached -- "$FINGERPRINT_SCOPE_PATH" 2>/dev/null || true
-      hash_untracked_path "$FINGERPRINT_SCOPE_PATH"
+      if [ "$REVIEW_IS_GIT" -eq 1 ]; then
+        git -C "$ROOT_DIR" status --porcelain=v1 -- ":(literal)$FINGERPRINT_SCOPE_PATH" "$DEEP_REVIEW_GIT_EXCLUDE" 2>/dev/null || true
+        git -C "$ROOT_DIR" diff --no-ext-diff HEAD -- ":(literal)$FINGERPRINT_SCOPE_PATH" "$DEEP_REVIEW_GIT_EXCLUDE" 2>/dev/null || true
+        git -C "$ROOT_DIR" diff --no-ext-diff --cached -- ":(literal)$FINGERPRINT_SCOPE_PATH" "$DEEP_REVIEW_GIT_EXCLUDE" 2>/dev/null || true
+        hash_untracked_path "$FINGERPRINT_SCOPE_PATH"
+      else
+        deep_review_hash_tree "$FINGERPRINT_SCOPE_PATH"
+      fi
       ;;
   esac
 }
@@ -510,7 +560,7 @@ if [ -z "$RUN_DIR" ]; then
   printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$RUN_DIR/started-at"
   {
     printf 'version=%s\n' "$RUNNER_VERSION"
-    for arg in "${FINGERPRINT_ARGS[@]}"; do printf 'arg=%s\n' "$arg"; done
+    for arg in ${FINGERPRINT_ARGS[@]+"${FINGERPRINT_ARGS[@]}"}; do printf 'arg=%s\n' "$arg"; done
   } >"$RUN_DIR/request.txt"
   echo "Starting durable review run: $RUN_DIR" >&2
 else
@@ -650,7 +700,7 @@ export DEEP_REVIEW_CI="$CI_MODE"
 export DEEP_REVIEW_FAIL_ON="$FAIL_ON"
 export PATH="$SHIM_DIR:$PATH"
 
-bash "$ENGINE" --max-concurrent "$SAFE_MAX" --keep-results "${ENGINE_ARGS[@]}" &
+bash "$ENGINE" --max-concurrent "$SAFE_MAX" --keep-results ${ENGINE_ARGS[@]+"${ENGINE_ARGS[@]}"} &
 ENGINE_PID=$!
 set +e
 wait "$ENGINE_PID"
@@ -688,6 +738,10 @@ if [ "$status" -eq 0 ] || [ "$CI_MODE" -eq 1 ]; then
   EXPORTED_RESULT="$SAVED_RESULT"
   EXPORTED_JSON="$SAVED_JSON"
   if [ -n "$RESULTS_DIR" ]; then
+    if [ "$RESULTS_DEFAULT" -eq 1 ] && [ -L "$RESULTS_DIR" ]; then
+      echo "Default .deep-review directory must not be a symlink: $RESULTS_DIR" >&2
+      exit 1
+    fi
     mkdir -p "$RESULTS_DIR" || { echo "Cannot create results directory: $RESULTS_DIR" >&2; exit 1; }
     chmod 700 "$RESULTS_DIR" 2>/dev/null || true
     run_name="$(basename "$RUN_DIR")"

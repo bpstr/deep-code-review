@@ -22,6 +22,7 @@ jobs:
           bash -n scripts/deep-review.sh
           bash -n skills/deep-review/scripts/deep-review.sh
           bash -n skills/deep-review/scripts/deep-review-engine.sh
+          bash -n skills/deep-review/scripts/review-paths.sh
           bash -n skills/deep-review/scripts/deep-review-provider-shim.sh
           bash -n skills/deep-review/scripts/deep-review-mktemp-shim.sh
           bash -n scripts/test-deep-review-recovery.sh
@@ -74,6 +75,10 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+
+      - name: Target and output storage regressions (no model credentials)
+        shell: bash
+        run: BASH_TEST=/bin/bash python3 scripts/test-review-paths.py
 
       - name: Strict CI regression tests (no model credentials)
         shell: bash
