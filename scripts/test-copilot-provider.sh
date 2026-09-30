@@ -131,8 +131,8 @@ printf '%s\n' "$stage" >>"${FAKE_CALL_LOG:?}"
 EOF_COPILOT
 chmod +x "$TMP/bin/copilot"
 
-# A competing Codex binary makes explicit-provider selection and historical auto
-# preference observable without ever calling a real model.
+# A competing Codex binary makes accidental cross-provider execution observable
+# without ever calling a real model.
 cat >"$TMP/bin/codex" <<'EOF_CODEX'
 #!/usr/bin/env bash
 printf 'codex\n' >>"${FAKE_AUTO_LOG:?}"
@@ -183,14 +183,17 @@ FAKE_CALL_LOG="$TMP/default-calls" DEEP_REVIEW_PROVIDER=copilot DEEP_REVIEW_STAT
 grep -q '^# Copilot Final Review' "$TMP/default.out"
 [ "$(wc -l <"$TMP/default-calls" | tr -d ' ')" -eq 5 ]
 
-# Installing Copilot must not silently change auto's Codex-then-Claude contract.
+# Installed CLIs must never be treated as caller identity. Clear any outer
+# native-session hints so this stays deterministic inside any agent or CI host.
 set +e
+CLAUDECODE= CODEX_THREAD_ID= DEEP_REVIEW_CALLER= \
 FAKE_CALL_LOG="$TMP/auto-copilot-calls" DEEP_REVIEW_PROVIDER=auto DEEP_REVIEW_STATE_DIR="$TMP/auto-state" \
   bash "$RUNNER" --max-concurrent 1 code >"$TMP/auto.out" 2>"$TMP/auto.err"
 auto_status=$?
 set -e
-[ "$auto_status" -ne 0 ]
-test -s "$FAKE_AUTO_LOG"
+[ "$auto_status" -eq 2 ]
+grep -q 'Cannot identify the invoking CLI' "$TMP/auto.err"
+[ ! -e "$FAKE_AUTO_LOG" ]
 [ ! -e "$TMP/auto-copilot-calls" ]
 
 DEEP_REVIEW_TEST_PROVIDER=copilot bash "$ROOT/scripts/test-provider-lifecycle.sh"

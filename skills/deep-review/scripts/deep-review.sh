@@ -6,13 +6,14 @@ umask 077
 # Keep compatible with Bash 3.2 (default Bash on macOS).
 
 RUNNER_VERSION="1.2.0"
-RUNNER_SCHEMA="5"
+RUNNER_SCHEMA="6"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENGINE="$SCRIPT_DIR/deep-review-engine.sh"
 PROVIDER_SHIM_SOURCE="$SCRIPT_DIR/deep-review-provider-shim.sh"
 MKTEMP_SHIM_SOURCE="$SCRIPT_DIR/deep-review-mktemp-shim.sh"
 CI_HELPER="$SCRIPT_DIR/deep-review-ci.py"
 . "$SCRIPT_DIR/review-paths.sh"
+. "$SCRIPT_DIR/review-provider.sh"
 INVOCATION_DIR="$(pwd -P)"
 
 usage_extra() {
@@ -429,18 +430,15 @@ elif [ "$REQUESTED_MAX" -gt "$SAFE_MAX" ]; then
   printf '.\n' >&2
 fi
 
-# Resolve auto provider before fingerprinting so a recovered run cannot silently mix
-# providers if installed availability changes between invocations. Copilot is
-# explicit opt-in and does not change the historical Codex/Claude auto order.
-case "$PROVIDER_REQUEST" in
-  auto)
-    if command -v codex >/dev/null 2>&1; then RESOLVED_PROVIDER=codex
-    elif command -v claude >/dev/null 2>&1; then RESOLVED_PROVIDER=claude
-    else RESOLVED_PROVIDER=none
-    fi
-    ;;
-  *) RESOLVED_PROVIDER="$PROVIDER_REQUEST" ;;
-esac
+# Resolve once before fingerprinting and pin the same identity in the engine.
+# Installed CLI order must never redirect a review to a different provider.
+RESOLVED_PROVIDER="$(deep_review_resolve_provider "$PROVIDER_REQUEST")" || exit $?
+if [ "$CI_MODE" -ne 1 ]; then
+  command -v "$RESOLVED_PROVIDER" >/dev/null 2>&1 || {
+    echo "Provider '$RESOLVED_PROVIDER' is not installed. No fallback will be used." >&2
+    exit 127
+  }
+fi
 
 hash_untracked_path() {
   pathspec="$1"
@@ -560,6 +558,7 @@ if [ -z "$RUN_DIR" ]; then
   printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$RUN_DIR/started-at"
   {
     printf 'version=%s\n' "$RUNNER_VERSION"
+    printf 'provider=%s\n' "$RESOLVED_PROVIDER"
     for arg in ${FINGERPRINT_ARGS[@]+"${FINGERPRINT_ARGS[@]}"}; do printf 'arg=%s\n' "$arg"; done
   } >"$RUN_DIR/request.txt"
   echo "Starting durable review run: $RUN_DIR" >&2
@@ -596,6 +595,9 @@ REAL_MKTEMP="$(command -v mktemp)"
 REAL_CODEX="$(command -v codex 2>/dev/null || true)"
 REAL_CLAUDE="$(command -v claude 2>/dev/null || true)"
 REAL_COPILOT="$(command -v copilot 2>/dev/null || true)"
+REAL_GROK="$(command -v grok 2>/dev/null || true)"
+REAL_GEMINI="$(command -v gemini 2>/dev/null || true)"
+REAL_MUSE="$(command -v muse 2>/dev/null || true)"
 SHIM_DIR="$WORK_DIR/.shims"
 mkdir -p "$SHIM_DIR"
 
@@ -607,6 +609,9 @@ chmod +x "$SHIM_DIR/provider-shim"
 [ -z "$REAL_CODEX" ] || ln -sf provider-shim "$SHIM_DIR/codex"
 [ -z "$REAL_CLAUDE" ] || ln -sf provider-shim "$SHIM_DIR/claude"
 [ -z "$REAL_COPILOT" ] || ln -sf provider-shim "$SHIM_DIR/copilot"
+[ -z "$REAL_GROK" ] || ln -sf provider-shim "$SHIM_DIR/grok"
+[ -z "$REAL_GEMINI" ] || ln -sf provider-shim "$SHIM_DIR/gemini"
+[ -z "$REAL_MUSE" ] || ln -sf provider-shim "$SHIM_DIR/muse"
 
 atomic_copy_file() {
   source_file="$1"
@@ -695,12 +700,16 @@ export DEEP_REVIEW_REAL_MKTEMP="$REAL_MKTEMP"
 export DEEP_REVIEW_REAL_CODEX="$REAL_CODEX"
 export DEEP_REVIEW_REAL_CLAUDE="$REAL_CLAUDE"
 export DEEP_REVIEW_REAL_COPILOT="$REAL_COPILOT"
+export DEEP_REVIEW_REAL_GROK="$REAL_GROK"
+export DEEP_REVIEW_REAL_GEMINI="$REAL_GEMINI"
+export DEEP_REVIEW_REAL_MUSE="$REAL_MUSE"
 export DEEP_REVIEW_SCORE_BATCH_SIZE="$SCORE_BATCH_SIZE"
 export DEEP_REVIEW_CI="$CI_MODE"
 export DEEP_REVIEW_FAIL_ON="$FAIL_ON"
 export PATH="$SHIM_DIR:$PATH"
 
-bash "$ENGINE" --max-concurrent "$SAFE_MAX" --keep-results ${ENGINE_ARGS[@]+"${ENGINE_ARGS[@]}"} &
+# Last option wins, including when the original request contained --provider auto.
+bash "$ENGINE" --max-concurrent "$SAFE_MAX" --keep-results ${ENGINE_ARGS[@]+"${ENGINE_ARGS[@]}"} --provider "$RESOLVED_PROVIDER" &
 ENGINE_PID=$!
 set +e
 wait "$ENGINE_PID"

@@ -4,6 +4,7 @@ set -euo pipefail
 bash -n scripts/deep-review.sh
 bash -n skills/deep-review/scripts/deep-review.sh
 bash -n skills/deep-review/scripts/deep-review-engine.sh
+bash -n skills/deep-review/scripts/review-provider.sh
 bash -n skills/deep-review/scripts/deep-review-provider-shim.sh
 bash -n skills/deep-review/scripts/deep-review-mktemp-shim.sh
 bash -n scripts/test-deep-review-recovery.sh
@@ -12,7 +13,8 @@ bash -n scripts/test-provider-lifecycle.sh
 bash -n scripts/test-copilot-provider.sh
 
 output="$(bash skills/deep-review/scripts/deep-review.sh --help)"
-grep -q -- '--provider codex|claude|copilot|auto' <<<"$output"
+grep -q -- '--provider codex|claude|copilot|grok|gemini|muse|auto' <<<"$output"
+grep -q -- 'DEEP_REVIEW_CALLER' <<<"$output"
 grep -q -- '--changes' <<<"$output"
 grep -q -- '--no-auto-specialists' <<<"$output"
 grep -q -- '--no-resume' <<<"$output"
@@ -38,10 +40,13 @@ grep -q 'a11y) echo accessibility-scanner' skills/deep-review/scripts/deep-revie
 grep -q 'run_provider_background' skills/deep-review/scripts/deep-review-engine.sh
 grep -q 'confidence scorer for a batch' skills/deep-review/scripts/deep-review-engine.sh
 
+python3 scripts/test-provider-selection.py
 bash scripts/test-provider-lifecycle.sh
 bash scripts/test-copilot-provider.sh
-bash scripts/test-deep-review-recovery.sh
-bash scripts/test-deep-review-efficiency.sh
+# These existing suites intentionally exercise their Codex doubles. Bind that
+# fixture identity rather than depending on installation order or the test host.
+DEEP_REVIEW_CALLER=codex bash scripts/test-deep-review-recovery.sh
+DEEP_REVIEW_CALLER=codex bash scripts/test-deep-review-efficiency.sh
 bash scripts/test-deep-review-ci.sh
 
 echo "deep-review runner smoke test passed"
