@@ -1,0 +1,1 @@
+Laravel 12 application excerpts. Invoice is a normal Eloquent model in the default SQL database. SendInvoice is a ShouldQueue job whose handle method loads Invoice::findOrFail($id) using a different worker connection. A Redis worker consumes immediately and has one attempt. The request is already authorized and validated. The active queue connection is the redis connection below.

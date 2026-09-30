@@ -1,0 +1,1 @@
+Spring Framework 6.2, Java 21 and JDBC. TxConfig is active. The service is invoked through its Spring proxy, JdbcTemplate uses the configured transaction manager, and no method-specific rollback exclusions exist. The insert must roll back on IOException.

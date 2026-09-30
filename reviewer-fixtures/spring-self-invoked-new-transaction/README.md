@@ -1,0 +1,1 @@
+Spring Framework 6.2, Java 21, JDBC and default proxy-based annotation transaction management. CheckoutService is a Spring service called through its proxy. The audit row must remain committed even when placing the order fails. There is no AspectJ weaving, self-proxy injection or separate audit service. JdbcTemplate uses the configured transaction-managed datasource.

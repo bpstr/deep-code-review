@@ -1,0 +1,1 @@
+Drupal 10.3 render-array excerpt. The badge is rendered for the current account with render caching enabled. It displays only the stable account ID. CacheableMetadata is applied before returning the result.

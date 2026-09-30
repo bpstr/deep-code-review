@@ -51,7 +51,8 @@ class ReviewPaths(unittest.TestCase):
         scripts = self.skill / "scripts"
         scripts.mkdir(parents=True)
         for name in ("deep-review.sh", "deep-review-engine.sh", "review-paths.sh", "review-provider.sh",
-                     "deep-review-provider-shim.sh", "deep-review-mktemp-shim.sh", "review-cache.sh"):
+                     "deep-review-provider-shim.sh", "deep-review-mktemp-shim.sh", "review-cache.sh",
+                     "backend-stack-detection.sh"):
             shutil.copy2(SOURCE / name, scripts / name)
         for name in ("agents/code-reviewer.md", "agents/synthesizer.md",
                      "support/stack-profiler.md", "support/architecture-review.md",

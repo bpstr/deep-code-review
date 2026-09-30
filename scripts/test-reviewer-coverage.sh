@@ -12,6 +12,10 @@ required=(
   vite-reviewer
   web-testing-reviewer
   js-package-reviewer
+  drupal-reviewer
+  laravel-reviewer
+  django-reviewer
+  spring-reviewer
   optimization-reviewer
   api-contract-reviewer
   database-migration-reviewer
@@ -64,4 +68,6 @@ grep -q 'JavaScript packages (`js-package`)' "$ROOT/README.md"
 grep -q 'REVIEWER-SOURCES.md' "$ROOT/REVIEWER-COVERAGE.md"
 grep -q 'reviewer-fixtures/' "$ROOT/REVIEWER-COVERAGE.md"
 
+bash "$ROOT/scripts/test-backend-routing.sh"
+bash "$ROOT/scripts/test-framework-review.sh"
 echo "reviewer coverage smoke test passed"

@@ -26,6 +26,18 @@ For each relevant language/runtime, report declared or lockfile-resolved version
 
 Distinguish declared ranges (for example `^19.0.0`) from exact/resolved versions.
 
+### Backend frameworks
+For relevant package roots, record evidence rather than importing a sibling application's stack:
+- Drupal core range/resolution, extension metadata and core_version_requirement, modern versus Drupal 7 APIs, relevant cache/access/config/update context.
+- Laravel/Illuminate versions, actual application versus component library, middleware/auth guards, queue driver and effective after_commit/overrides, configuration caching and ordinary request versus Octane/queue-worker lifetime. Sanctum cookie SPA versus bearer-token authentication when relevant.
+- Symfony/Doctrine/Messenger presence, application versus transitive components, entity-manager/worker lifetime and reset behavior when explicit.
+- Django/DRF versions, database backend/aliases, WSGI versus ASGI, effective middleware/permission/authentication defaults, ATOMIC_REQUESTS and applicable transaction settings.
+- Java/Kotlin target, Spring Boot/Framework/Security versions, Maven/Gradle module and parent/BOM/catalog evidence; do not equate a Gradle Kotlin DSL file with Kotlin source.
+- Spring Servlet MVC versus WebFlux, JDBC/JPA versus reactive persistence, transaction manager, class/interface proxy or weaving mode, publicMethodsOnly and rollback rule overrides, Kotlin all-open/kotlin-spring when relevant.
+- Test evidence capable of exercising actual framework mechanisms: proxies, commit callbacks, ORM flushes, cache variation and worker reuse versus unit doubles.
+
+Never start the application, evaluate setup.py or execute Maven/Gradle/Composer just to infer versions. Do not read secret values from environment files. Record unresolved inheritance/configuration as unknown and include file paths supporting important facts. Omit irrelevant framework sections to keep the profile bounded.
+
 ### JavaScript/package system
 - npm/pnpm/yarn/bun or unknown; lockfile(s)
 - ESM/CJS indicators (`type`, extensions, module compiler settings)
@@ -71,6 +83,9 @@ List version-sensitive rules reviewers must respect, for example:
 - "package is publishable: exports/peer/type declarations are consumer contracts"
 - "pure SPA: do not invent SSR hydration findings"
 - "free-threaded CPython explicitly supported: do not rely on implicit GIL serialization"
+- "Drupal 7: do not apply modern content entity query/render-context APIs"
+- "Spring 6+ class proxy: protected/package-visible transactional methods can be advised"
+- "Laravel connection after_commit enabled: per-job afterCommit is not required"
 
 ## Output rules
 

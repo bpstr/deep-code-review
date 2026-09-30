@@ -1,0 +1,1 @@
+Django 5.2 with PostgreSQL. Migration 0001 creates Product with id and name. Migration 0003 adds sku. A fresh deployment replays 0001, then the shown 0002, then 0003; models.py represents today's model including sku. The migration inserts a seed row while the database still has the 0001 schema.

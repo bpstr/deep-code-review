@@ -1,0 +1,1 @@
+Drupal 10.3 render-array excerpt. The caller renders this badge for the current authenticated account. Two accounts with identical permissions visit the same route. Render caching is enabled; no parent attaches user variation. The badge displays only the account ID, not mutable profile fields.

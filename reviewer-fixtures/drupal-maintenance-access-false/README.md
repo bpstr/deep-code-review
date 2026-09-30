@@ -1,0 +1,1 @@
+Drupal 10.3 trusted administrator CLI command. It is not registered as an HTTP route and accepts no user input. The operation counts all nodes for an administrative maintenance report; it is intentionally not a visitor-visible query.

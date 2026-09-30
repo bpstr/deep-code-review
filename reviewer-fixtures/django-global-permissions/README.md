@@ -1,0 +1,1 @@
+Django 5.2 and DRF 3.16 excerpts. The shown settings are active. The status endpoint is available to every authenticated user and returns no per-user private data. Standard authentication middleware/backends are configured elsewhere; no view overrides the global permission default.

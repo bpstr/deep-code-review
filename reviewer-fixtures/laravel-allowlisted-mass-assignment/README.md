@@ -1,0 +1,1 @@
+Laravel 12 controller/model excerpts. TaskPolicy is registered and authorizes creation. The task has only a user-writable title in this operation; submitted privileged attributes must not be passed to the model. The controller uses Laravel's validated return array directly, not request()->all().
