@@ -1,6 +1,6 @@
 ---
 name: deep-review
-description: Run comprehensive multi-agent code reviews with isolated specialists, shared stack/version context, automatic stack-aware routing, synthesis, confidence scoring, and P0/P1/P2 prioritization. Use for deep or pre-merge reviews, production-readiness and architecture audits, framework antipatterns including Drupal/Laravel/Django/Spring, security, performance or optimization passes, test quality/realism/gaps, packaging boundaries, and operational failure analysis, including CI review gates. Supports Codex CLI, Claude Code, and explicit GitHub Copilot CLI selection.
+description: Run comprehensive multi-agent code reviews with isolated specialists, shared stack/version context, automatic stack-aware routing, synthesis, confidence scoring, and P0/P1/P2 prioritization. Use for deep or pre-merge reviews, production-readiness and architecture audits, framework antipatterns including Drupal/Laravel/Django/Spring, security, performance or optimization passes, test quality/realism/gaps, packaging boundaries, and operational failure analysis, including CI review gates. Uses the invoking client's native CLI: Codex, Claude Code, GitHub Copilot, Grok Build, Gemini CLI, or Meta Muse Code; never silently switches providers.
 argument-hint: "[aspects] [--pr|--branch|--changes|path]"
 ---
 
@@ -10,17 +10,29 @@ Run Deep Code Review for the user; do not ask them to locate or execute the bund
 
 ## Execution
 
-Resolve `SKILL_DIR` as the directory containing this `SKILL.md`, then invoke:
+Resolve `SKILL_DIR` as the directory containing this `SKILL.md`. Identify the actual client hosting this skill, not the model name, skill installation path, API keys, or whichever executable happens to be installed. Set `CALLER_PROVIDER` to that client's canonical ID: Codex → `codex`, Claude Code → `claude`, GitHub Copilot CLI → `copilot`, Grok Build → `grok`, Gemini CLI → `gemini`, Meta Muse Code → `muse`.
+
+Bind that identity on **every invocation**, including retries and the examples below:
 
 ```bash
-bash "$SKILL_DIR/scripts/deep-review.sh" [scope] [aspects...]
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" [scope] [aspects...]
 ```
 
-The runner auto-detects Codex first and Claude second, builds shared stack/version context for stack-sensitive reviews, launches isolated specialist processes, synthesizes findings, confidence-scores them, and performs final P0/P1/P2 triage.
+A Grok-hosted review must launch `grok`, a Claude-hosted review must launch `claude`, a Meta Muse Code-hosted review must launch `muse exec`, and likewise for the other supported clients. This applies to shared profiling, every specialist, synthesis, extraction, confidence scoring, and final triage—not just the first stage. Do not invoke Codex tasks from another client merely because Codex is available. Muse can discover skills from Codex/Claude directories; their location does not change its caller identity.
 
-Use `--provider copilot` for GitHub Copilot CLI. Copilot is an explicit provider choice and does not change existing auto-detection.
+An explicit user `--provider` takes precedence, followed by `DEEP_REVIEW_PROVIDER`; otherwise `auto` uses the bound caller. Do not add a cross-provider override yourself. The runner recognizes unambiguous native Claude/Codex session markers as a compatibility aid, but the skill must still bind its current client explicitly because inherited outer-session markers can be stale. Unknown, conflicting, or unsupported caller identities fail with an actionable error. Missing executables, authentication failures, rate limits, and unsupported CLI flags must never cause a retry with a different provider. Report the limitation instead. See [provider selection](support/provider-selection.md).
+
+The runner builds shared stack/version context for stack-sensitive reviews, launches isolated specialist processes using the selected native CLI, synthesizes findings, confidence-scores them, and performs final P0/P1/P2 triage. Model overrides remain optional and must belong to the selected provider.
 
 The final Markdown report is both returned on stdout and persisted as `artifacts/review.md`. When the caller can surface stdout to the user, show the report directly rather than only pointing to the saved file.
+
+## Targets and local reports
+
+Preserve the user's target file/directory. Forward it as `--target PATH` (an existing positional path is also supported); do not substitute `.` or assume the caller's working directory or the skill installation directory is the target repository. For another target's branch or changes, place the scope flag after the target, for example `--target /projects/app --changes tests`.
+
+The runner discovers Git from the target directory or a file's parent. It uses that worktree's root when available; without Git it uses the target directory or file's parent. With no target and no Git it reviews the invocation directory as a path. Explicit branch/changes scopes require Git.
+
+Local runs default to `<resolved-root>/.deep-review/` for unique reports and `latest.md`, independent of provider. Do not override this to `.codex`, `.claude`, `.muse`, or the installation directory unless the user explicitly requests that destination. Explicit output overrides and CI/cloud storage remain supported; recovery state and machine-local provider slots stay separate. See [output storage](support/output-storage.md) for resolution examples, overrides, exclusions and privacy.
 
 ## Intent mapping
 
@@ -65,10 +77,10 @@ Compatibility controls:
 
 ```bash
 # Historical exact full set, without automatic specialist augmentation/profile call
-bash "$SKILL_DIR/scripts/deep-review.sh" --no-auto-specialists full
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" --no-auto-specialists full
 
 # Equivalent environment control
-DEEP_REVIEW_AUTO_SPECIALISTS=0 bash "$SKILL_DIR/scripts/deep-review.sh" full
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" DEEP_REVIEW_AUTO_SPECIALISTS=0 bash "$SKILL_DIR/scripts/deep-review.sh" full
 ```
 
 Existing aspect names and direct reviewer IDs remain valid. `smart` is an explicit alias for a full stack-aware review. Explicit stack reviewers still receive stack profiling even when automatic routing is disabled.
@@ -94,13 +106,13 @@ Useful output controls:
 
 ```bash
 # Export one exact result file atomically
-bash "$SKILL_DIR/scripts/deep-review.sh" --output ./review.md full
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" --output ./review.md full
 
 # Keep timestamped/unique exports plus latest.md in a result directory
-bash "$SKILL_DIR/scripts/deep-review.sh" --results-dir /secure/results full
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" --results-dir /secure/results full
 
 # Discover the latest durable result
-bash "$SKILL_DIR/scripts/deep-review.sh" --latest-result
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" --latest-result
 ```
 
 Equivalent environment variables are `DEEP_REVIEW_RESULT_FILE`, `DEEP_REVIEW_RESULTS_DIR`, and `DEEP_REVIEW_STATE_DIR`. Treat recovery state and public/exported results as separate storage concerns: use job-local temporary state when persistence is unnecessary, and point results to a secured mounted volume or CI artifact staging path when reports need to survive containers, jobs, or hosts. Persistent recovery state may also use a mounted volume, but namespace it per runner/process environment rather than sharing one live state namespace concurrently across unrelated hosts.
@@ -142,28 +154,28 @@ These remain opt-in until calibrated:
 
 ```bash
 # Stack-aware full branch review
-bash "$SKILL_DIR/scripts/deep-review.sh" full
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" full
 
 # General test trustworthiness: false greens, unrealistic scenarios, coverage gaps
-bash "$SKILL_DIR/scripts/deep-review.sh" --changes tests
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" --changes tests
 
 # Comprehensive web test review
-bash "$SKILL_DIR/scripts/deep-review.sh" --changes tests web-testing
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" --changes tests web-testing
 
 # Uncommitted React + Vite review
-bash "$SKILL_DIR/scripts/deep-review.sh" --changes vite react ts-frontend a11y
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" --changes vite react ts-frontend a11y
 
 # Web testing reliability only
-bash "$SKILL_DIR/scripts/deep-review.sh" --changes web-testing
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" --changes web-testing
 
 # Reusable JS package/public API review
-bash "$SKILL_DIR/scripts/deep-review.sh" --changes js-package
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" --changes js-package
 
 # Historical full reviewer set
-bash "$SKILL_DIR/scripts/deep-review.sh" --no-auto-specialists full
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" --no-auto-specialists full
 
 # Aggressive optimization pass
-bash "$SKILL_DIR/scripts/deep-review.sh" --changes perf optimization-reviewer simplify concurrency sql
+DEEP_REVIEW_CALLER="$CALLER_PROVIDER" bash "$SKILL_DIR/scripts/deep-review.sh" --changes perf optimization-reviewer simplify concurrency sql
 ```
 
 ## Calibration
@@ -182,7 +194,7 @@ Persistent state and exported reports can contain proprietary source references 
 
 ## Output
 
-Present the final P0/P1/P2 report produced by the runner to the user and mention the saved result path when it is available. Mention review gaps if any specialist or shared stack profiling failed. Do not automatically fix findings unless the user explicitly asks for fixes.
+Present the final P0/P1/P2 report produced by the runner to the user and mention the saved result path when it is available. Prefer the unique `Exported review result` path when present; otherwise use `Saved review result`. Do not invent an engine-specific result path. Mention review gaps if any specialist or shared stack profiling failed. Do not automatically fix findings unless the user explicitly asks for fixes.
 
 ## Architecture and antipattern reviews
 

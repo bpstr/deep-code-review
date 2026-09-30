@@ -4,6 +4,10 @@ set -euo pipefail
 # Deep Code Review portable runner.
 # Keep this compatible with Bash 3.2 (the default Bash shipped with macOS).
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/review-paths.sh"
+. "$SCRIPT_DIR/review-provider.sh"
+
 usage() {
   cat <<'USAGE'
 Deep Code Review — provider-neutral parallel code review
@@ -14,7 +18,12 @@ Usage:
 Scope:
   --pr | --branch       Review current branch against detected base (default)
   --changes             Review uncommitted + staged changes
-  PATH                  Review a specific path
+  PATH | --target PATH  Review a file/directory (resolved from the invocation directory)
+
+The explicit target determines the Git worktree root, even when invoked elsewhere.
+Without Git, a directory is its own root and a file uses its containing directory.
+Without a target, use the current Git worktree or a path review of the current directory.
+Explicit --branch/--changes require Git. Generated .deep-review reports are excluded.
 
 Common aspects:
   core, full, smart, code, errors, arch, types, comments, tests, web-testing,
@@ -42,8 +51,8 @@ Any reviewer filename under agents/ can also be used directly, for example:
   resource-lifecycle-reviewer
 
 Options:
-  --provider codex|claude|copilot|auto
-                                 Agent CLI provider (default: auto: codex, then claude)
+  --provider codex|claude|copilot|grok|gemini|muse|auto
+                                 Agent CLI provider (default: auto: invoking client)
   --model MODEL                  Model for review/synthesis agents
   --fast-model MODEL             Model for confidence scoring and stack profiling
   --base REF                     Base branch/ref for branch review
@@ -55,6 +64,9 @@ Options:
   -h, --help                     Show help
 
 Environment:
+  DEEP_REVIEW_PROVIDER sets an explicit provider (overridden by --provider).
+  DEEP_REVIEW_CALLER identifies the invoking CLI for auto selection.
+  Unknown/ambiguous callers fail; installed CLIs are never a fallback.
   DEEP_REVIEW_AUTO_SPECIALISTS=0 disables full-review specialist detection.
   CONFIDENCE_THRESHOLD=0..100 controls the final confidence filter (default: 80).
   DEEP_REVIEW_SCORE_BATCH_SIZE controls findings per confidence call (default: 4).
@@ -76,6 +88,7 @@ ARCH_TOOLS=0
 ARCH_EVIDENCE_INPUT=
 SCOPE_MODE=branch
 SCOPE_PATH=
+SCOPE_EXPLICIT=0
 ASPECTS=
 
 while [ "$#" -gt 0 ]; do
@@ -95,15 +108,24 @@ while [ "$#" -gt 0 ]; do
       ARCH_EVIDENCE_INPUT="$(cd "$input" && pwd)"
       shift
       ;;
+    --target)
+      [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "--target requires a path." >&2; exit 2; }
+      [ -z "$SCOPE_PATH" ] || { echo "Only one review target is supported." >&2; exit 2; }
+      SCOPE_PATH="$(deep_review_absolute_target "$2")"
+      SCOPE_MODE=path
+      SCOPE_EXPLICIT=1
+      shift 2
+      ;;
     --keep-results) KEEP_RESULTS=1; shift ;;
-    --pr|--branch) SCOPE_MODE=branch; shift ;;
-    --changes) SCOPE_MODE=changes; shift ;;
+    --pr|--branch) SCOPE_MODE=branch; SCOPE_EXPLICIT=1; shift ;;
+    --changes) SCOPE_MODE=changes; SCOPE_EXPLICIT=1; shift ;;
     -h|--help) usage; exit 0 ;;
     --*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
     *)
       if [ -e "$1" ] && [ -z "$SCOPE_PATH" ]; then
         SCOPE_MODE=path
-        SCOPE_PATH="$1"
+        SCOPE_PATH="$(deep_review_absolute_target "$1")"
+        SCOPE_EXPLICIT=1
       else
         ASPECTS="$ASPECTS $1"
       fi
@@ -112,6 +134,10 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+deep_review_resolve_scope "$SCOPE_PATH" "$SCOPE_MODE" "$SCOPE_EXPLICIT"
+SCOPE_PATH="$REVIEW_SCOPE_PATH"
+SCOPE_MODE="$REVIEW_SCOPE_MODE"
+
 if [ "$CI_MODE" -eq 1 ]; then
   [ "$PROVIDER" != auto ] || { echo "--ci requires an explicit provider (or DEEP_REVIEW_PROVIDER)." >&2; exit 2; }
   [ "$SCOPE_MODE" != branch ] || [ -n "$REVIEW_BASE" ] || { echo "--ci branch reviews require --base or REVIEW_BASE." >&2; exit 2; }
@@ -119,20 +145,13 @@ if [ "$CI_MODE" -eq 1 ]; then
 fi
 export DEEP_REVIEW_CI="$CI_MODE"
 
-case "$PROVIDER" in
-  auto)
-    if command -v codex >/dev/null 2>&1; then PROVIDER=codex
-    elif command -v claude >/dev/null 2>&1; then PROVIDER=claude
-    else echo "Neither 'codex' nor 'claude' is installed." >&2; exit 127
-    fi
-    ;;
-  codex|claude|copilot)
-    if [ "$CI_MODE" -ne 1 ]; then
-      command -v "$PROVIDER" >/dev/null 2>&1 || { echo "Provider '$PROVIDER' is not installed." >&2; exit 127; }
-    fi
-    ;;
-  *) echo "Unsupported provider: $PROVIDER" >&2; exit 2 ;;
-esac
+PROVIDER="$(deep_review_resolve_provider "$PROVIDER")" || exit $?
+if [ "$CI_MODE" -ne 1 ]; then
+  command -v "$PROVIDER" >/dev/null 2>&1 || {
+    echo "Provider '$PROVIDER' is not installed. No fallback will be used." >&2
+    exit 127
+  }
+fi
 
 case "$MAX_CONCURRENT" in *[!0-9]*|'') echo "MAX_CONCURRENT must be a positive integer." >&2; exit 2;; esac
 [ "$MAX_CONCURRENT" -gt 0 ] || { echo "MAX_CONCURRENT must be positive." >&2; exit 2; }
@@ -142,8 +161,6 @@ case "$AUTO_SPECIALISTS" in 0|1) ;; *) echo "DEEP_REVIEW_AUTO_SPECIALISTS must b
 case "$SCORE_BATCH_SIZE" in *[!0-9]*|'') echo "DEEP_REVIEW_SCORE_BATCH_SIZE must be a positive integer." >&2; exit 2;; esac
 [ "$SCORE_BATCH_SIZE" -gt 0 ] || { echo "DEEP_REVIEW_SCORE_BATCH_SIZE must be positive." >&2; exit 2; }
 
-ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 AGENT_DIR="$SKILL_DIR/agents"
 STACK_PROFILER="$SKILL_DIR/support/stack-profiler.md"
@@ -175,14 +192,14 @@ case "$SCOPE_MODE" in
     else
       BASE="$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null || git rev-list --max-parents=0 HEAD | head -1)"
     fi
-    CHANGED_FILES="$(git diff --name-only "$BASE"...HEAD)"
-    CHANGED_LINES="$(git diff "$BASE"...HEAD --unified=0 | grep -E '^@@|^diff --git' || true)"
+    CHANGED_FILES="$(git diff --name-only "$BASE"...HEAD -- . "$DEEP_REVIEW_GIT_EXCLUDE")"
+    CHANGED_LINES="$(git diff "$BASE"...HEAD --unified=0 -- . "$DEEP_REVIEW_GIT_EXCLUDE" | grep -E '^@@|^diff --git' || true)"
     ;;
   changes)
     # `git diff HEAD` already includes staged and unstaged tracked changes. Avoid a second
     # cached diff pass (and duplicate hunks) on large working trees.
-    CHANGED_FILES="$(git diff --name-only HEAD)"
-    CHANGED_LINES="$(git diff HEAD --unified=0 | grep -E '^@@|^diff --git' || true)"
+    CHANGED_FILES="$(git diff --name-only HEAD -- . "$DEEP_REVIEW_GIT_EXCLUDE")"
+    CHANGED_LINES="$(git diff HEAD --unified=0 -- . "$DEEP_REVIEW_GIT_EXCLUDE" | grep -E '^@@|^diff --git' || true)"
     ;;
   path)
     CHANGED_FILES="$SCOPE_PATH"
@@ -360,7 +377,7 @@ for agent in $AGENTS; do
       ;;
   esac
   case "$agent" in
-    react-reviewer|vite-reviewer|web-testing-reviewer|js-package-reviewer|ts-frontend-reviewer|ts-backend-reviewer|nextjs-reviewer|vue-reviewer|angular-reviewer|svelte-reviewer|react-native-reviewer|go-reviewer|rust-reviewer|python-reviewer|django-reviewer|php-reviewer|drupal-reviewer|laravel-reviewer|spring-reviewer|ruby-reviewer|rails-reviewer|java-reviewer|kotlin-server-reviewer|scala-reviewer|dotnet-reviewer|cpp-reviewer|elixir-reviewer|flutter-reviewer|ios-platform-reviewer|macos-platform-reviewer|android-platform-reviewer|swift-data-reviewer)
+    react-reviewer|vite-reviewer|web-testing-reviewer|js-package-reviewer|ts-frontend-reviewer|ts-backend-reviewer|nextjs-reviewer|vue-reviewer|angular-reviewer|svelte-reviewer|react-native-reviewer|go-reviewer|rust-reviewer|python-reviewer|django-reviewer|php-reviewer|drupal-reviewer|laravel-reviewer|spring-reviewer|ruby-reviewer|rails-reviewer|java-reviewer|kotlin-server-reviewer|scala-reviewer|dotnet-reviewer|cpp-reviewer|elixir-reviewer|flutter-reviewer|ios-platform-reviewer|macos-platform-reviewer|swift-data-reviewer|android-platform-reviewer)
       NEEDS_STACK_PROFILE=1
       ;;
   esac
@@ -373,6 +390,10 @@ $CHANGED_FILES
 
 CHANGED LINE RANGES:
 $CHANGED_LINES
+
+Review root: $ROOT_DIR
+Generated .deep-review/ directories are excluded from all source analysis, recursive
+searches, manifest discovery and findings. They are reports, not project inputs.
 
 Automatically selected specialists for this full review:
 ${AUTO_DETECTED:-none}
@@ -409,7 +430,7 @@ run_provider_background() {
       exec codex exec --ephemeral --sandbox workspace-write --add-dir "$REVIEW_DIR" --skip-git-repo-check "$prompt"
     fi
   elif [ "$PROVIDER" = copilot ]; then
-    # Copilot is explicitly selected; it never changes the historical auto order.
+    # Copilot uses its own native CLI, just like every other selected provider.
     # Native file tools write pipeline artifacts. These CLI permissions are not an
     # OS sandbox or a guarantee that repository files cannot be modified. Keep
     # execution on a trusted, disposable runner and do not approve source scripts.
@@ -430,13 +451,42 @@ Copilot execution constraints: Create the requested review artifacts with native
     )
     [ -z "$model" ] || copilot_args+=(--model "$model")
     exec copilot "${copilot_args[@]}"
-  else
+  elif [ "$PROVIDER" = grok ]; then
+    # Native Grok Build headless execution, not Codex with a Grok model name.
+    # The read-only profile allows temporary artifact writes. Do not bypass an
+    # unavailable sandbox or managed permission policy; report the stage failure.
+    grok_args=(-p "$prompt" --no-auto-update --sandbox read-only
+      --allowedTools "Bash,Read,Write,Edit,Glob,Grep")
+    [ -z "$model" ] || grok_args+=(--model "$model")
+    exec grok "${grok_args[@]}"
+  elif [ "$PROVIDER" = gemini ]; then
+    # Permit native artifact edits, not blanket shell approval. Folder-trust and
+    # managed policies remain in force; no --yolo or session-resume fallback.
+    gemini_args=(-p "$prompt" --approval-mode auto_edit
+      --include-directories "$SKILL_DIR" --include-directories "$REVIEW_DIR")
+    [ -z "$model" ] || gemini_args+=(--model "$model")
+    exec gemini "${gemini_args[@]}"
+  elif [ "$PROVIDER" = muse ]; then
+    # Muse has an exec subcommand with a positional prompt, not Claude's -p.
+    # Keep the OS sandbox; do not automatically trust project hooks or reuse a
+    # retained Muse session. Deep Review owns stage recovery independently.
+    muse_prompt="$prompt
+
+Muse execution constraints: Review root is $ROOT_DIR. Read the absolute instruction and artifact paths above; use sandboxed shell inspection when native file tools are workspace-confined. Write only the requested review artifacts under $REVIEW_DIR, using sandboxed shell writes for this temporary directory when needed. Do not modify source files, run project scripts/tests/installers, or invoke MCP tools. If workspace trust, sandbox, or managed policy blocks an operation, report the limitation; do not weaken the policy or switch providers."
+    muse_args=(exec --disable-approval --no-session-log --workspace "$ROOT_DIR")
+    [ -z "$model" ] || muse_args+=(--model "$model")
+    # Keep the prompt last: the lifecycle shim uses the same positional contract.
+    exec muse "${muse_args[@]}" "$muse_prompt"
+  elif [ "$PROVIDER" = claude ]; then
     unset CLAUDECODE 2>/dev/null || true
     if [ -n "$model" ]; then
       exec claude -p "$prompt" --allowedTools "Bash,Read,Write,Glob,Grep" --model "$model"
     else
       exec claude -p "$prompt" --allowedTools "Bash,Read,Write,Glob,Grep"
     fi
+  else
+    echo "Unsupported provider: $PROVIDER; no fallback is permitted." >&2
+    exit 2
   fi
 }
 
@@ -455,7 +505,7 @@ if [ "$ARCH_TOOLS" -eq 1 ] || [ -n "$ARCH_EVIDENCE_INPUT" ]; then
   scanner_args=()
   if [ "$ARCH_TOOLS" -eq 1 ]; then
     # A branch review cannot attribute scanner results from a dirty worktree to HEAD.
-    if [ "$SCOPE_MODE" = branch ] && [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
+    if [ "$SCOPE_MODE" = branch ] && [ -n "$(git status --porcelain --untracked-files=normal -- . "$DEEP_REVIEW_GIT_EXCLUDE")" ]; then
       echo 'Scanner execution skipped: branch review requires a clean working tree.' >>"$ARCH_GAPS_FILE"
     else
       scanner_args+=(--execute)
@@ -647,9 +697,9 @@ fi
 
 if [ "$FINDING_COUNT" -gt 0 ]; then
   case "$SCOPE_MODE" in
-    branch) git diff "$BASE"...HEAD >"$REVIEW_DIR/review.diff" ;;
-    changes) git diff HEAD >"$REVIEW_DIR/review.diff" ;;
-    path) git diff HEAD -- "$SCOPE_PATH" >"$REVIEW_DIR/review.diff" 2>/dev/null || : ;;
+    branch) git diff "$BASE"...HEAD -- . "$DEEP_REVIEW_GIT_EXCLUDE" >"$REVIEW_DIR/review.diff" ;;
+    changes) git diff HEAD -- . "$DEEP_REVIEW_GIT_EXCLUDE" >"$REVIEW_DIR/review.diff" ;;
+    path) git diff HEAD -- ":(literal)$SCOPE_PATH" "$DEEP_REVIEW_GIT_EXCLUDE" >"$REVIEW_DIR/review.diff" 2>/dev/null || : ;;
   esac
 
   n=1
