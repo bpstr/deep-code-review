@@ -25,3 +25,6 @@ django-historical-model-import	django-reviewer	present	DJ-MIGRATE|historical|app
 spring-self-invoked-new-transaction	spring-reviewer	present	SPR-PROXY|self.invoc|REQUIRES_NEW|proxy.*bypass	A same-instance call cannot create the promised independent audit transaction in proxy mode.
 spring-protected-class-proxy	spring-reviewer	absent	only public.*transaction|protected.*(cannot|never).*intercept|must.*public.*transaction	Spring 6.2 class proxies can advise this protected method called through the proxy.
 spring-configured-checked-rollback	spring-reviewer	absent	missing.*rollbackFor|must.*rollbackFor|checked exception.*(will not|does not).*rollback	Spring 6.2 ALL_EXCEPTIONS already configures checked-exception rollback.
+react193-fragment-ref	react-reviewer	absent	Fragment ref.*(invalid|unsupported)|cannot.*ref.*Fragment|must.*wrapper.*ref	React 19.3 Fragment refs must not be rejected as unsupported.
+playwright158-removed-react-selector	web-testing-reviewer	present	(_react|react selector).*(removed|unsupported|1\.58)|(1\.58|removed).*(_react|react selector)	Playwright 1.58 removed the experimental React selector.
+playwright157-react-selector	web-testing-reviewer	absent	1\.57.*(_react|react selector).*(removed|unsupported)|(_react|react selector).*removed.*1\.57	The React selector must not be misreported as already removed in Playwright 1.57.
