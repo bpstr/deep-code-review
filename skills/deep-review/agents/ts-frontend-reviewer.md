@@ -119,3 +119,13 @@ Group [NEW] first, then [PRE-EXISTING], ordered by severity.
 Understand current TypeScript semantics for `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noUncheckedSideEffectImports`, `verbatimModuleSyntax`, modern `moduleResolution`, and TypeScript 6.0's changed defaults/deprecations. These are tools for enforcing contracts, not universal requirements. Check the project's actual TypeScript version before recommending them.
 
 Remember: strong frontend TypeScript means the compiler describes reality and untrusted runtime data is not smuggled past it with assertions.
+
+## TypeScript 7 calibration
+
+When the shared stack context confirms TypeScript 7+, treat it as a distinct compiler/tooling generation rather than merely "TypeScript 6 with newer syntax":
+- TypeScript 7 uses the native compiler implementation; do not assume tools can import the historical JavaScript programmatic compiler API from the TypeScript 7 package.
+- TS6-deprecated legacy compiler options that become unsupported in TS7 are deterministic migration/build failures, not style findings.
+- A repository may intentionally install TypeScript 7 for builds while retaining `@typescript/typescript6` (or an equivalent TS6 compatibility path) for tooling that still requires the old compiler API. Do not report that dual setup as duplicate-dependency drift without evidence of an actual conflict.
+- Embedded-language/framework tooling may intentionally remain on TS6 while application compilation moves to TS7. Establish the tool's declared compatibility before recommending deduplication or upgrades.
+
+Do not apply TypeScript 7 behavior to repositories whose compiler major is 6 or older.

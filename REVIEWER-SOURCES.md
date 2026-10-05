@@ -201,3 +201,13 @@ Style-only preferences should be omitted or remain LOW and must survive confiden
 ## Behavioral calibration
 
 Prompt-content smoke tests protect important factual rules, but they are not sufficient. `reviewer-fixtures/` contains small positive and negative examples for opt-in model-based calibration. The fixture harness should be used to measure whether specialists actually find required failures and avoid known false positives before promoting more rules/reviewers into automatic coverage.
+
+## October 2026 TypeScript / Node refresh
+
+Primary:
+- TypeScript 7.0 announcement/release material: https://devblogs.microsoft.com/typescript/announcing-typescript-7/
+- TypeScript native-port migration guidance: https://github.com/microsoft/typescript-go
+- Node.js TypeScript execution: https://nodejs.org/api/typescript.html
+- Node.js 26 release/changelog: https://nodejs.org/en/blog/release/
+
+Calibration takeaway: TypeScript 7 is a compiler/tooling generation change, not just a syntax bump. Do not assume the historical JavaScript compiler API exists in the TS7 package, and accept intentional TS7 + TS6-compatibility-tooling setups when a tool still requires that API. For native Node TypeScript, gate CLI-flag findings by the actual Node major; Node 26 no longer accepts `--experimental-transform-types`.
