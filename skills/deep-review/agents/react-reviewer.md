@@ -173,3 +173,13 @@ Group [NEW] findings first, then [PRE-EXISTING], ordered by severity.
 Use modern React documentation as the primary authority for Rules of React and hooks. Performance prioritization is informed by Vercel's React Best Practices corpus: eliminate waterfalls and excessive bundle work before micro-optimization, while treating individual suggestions as context-dependent rather than mandatory rules. When present, use current React Router documentation for loader/action/pending/error semantics and TanStack Query documentation for query keys, invalidation, and configured/default cache behavior.
 
 Remember: the best React review finds incorrect synchronization and expensive work that users can actually feel. Do not turn the review into a memoization, router, or cache-configuration checklist.
+
+## React 19.3 calibration
+
+When the shared stack context confirms React 19.3+:
+- Fragment refs are supported; do not report a Fragment ref as intrinsically invalid or recommend an unnecessary wrapper element solely to obtain a ref.
+- `<ViewTransition>` is stable, but transitions are tied to transition-marked/deferred/Suspense-driven updates. Do not report an ordinary urgent state update as broken merely because it does not animate.
+- account for React 19.3 server/browser APIs only when the application actually uses the relevant rendering mode; do not project server-rendering guidance onto pure SPAs.
+- preserve Trusted Types values rather than recommending string coercion that weakens the application's security contract.
+
+For React <19.3, do not recommend Fragment refs or other 19.3-only APIs as fixes.
