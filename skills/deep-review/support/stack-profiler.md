@@ -95,3 +95,12 @@ List version-sensitive rules reviewers must respect, for example:
 - Never reproduce secrets or values from `.env`/credential files.
 - Do not recommend upgrades or improvements.
 - Do not modify repository files; write only the runner-provided output path.
+
+
+### TypeScript 7 / Node 26 evidence
+When JavaScript/TypeScript is relevant, additionally record:
+- TypeScript 7+ versus TypeScript 6 compatibility packages (including `@typescript/typescript6`) when both are present; do not collapse them into one "duplicate TypeScript" fact.
+- tooling that imports or depends on the TypeScript compiler API when inferable from manifests/configuration.
+- Node 26+ scripts that still pass `--experimental-transform-types`, because the flag's availability is runtime-major-sensitive.
+
+Add review constraints such as "TypeScript 7: native compiler; old programmatic compiler API may require TS6 compatibility tooling" and "Node 26: do not accept --experimental-transform-types" only when the declared versions support those statements.
