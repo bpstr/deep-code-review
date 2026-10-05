@@ -136,3 +136,9 @@ Group [NEW] first, then [PRE-EXISTING], ordered by severity.
 Use current TypeScript release/configuration documentation and Node's TypeScript execution documentation for the declared runtime. Native Node type stripping, compiler emission, `tsx`/`ts-node`, and bundler execution are different contracts; establish which one the project uses before making module/configuration claims.
 
 Remember: backend TypeScript is safest when runtime boundaries are validated, async work has explicit ownership, and the deployed execution mode behaves exactly like the compiler/tooling thinks it does.
+
+## TypeScript 7 and Node 26 calibration
+
+When TypeScript 7+ is actually installed, distinguish compiler execution from tooling integrations: the native TypeScript 7 compiler does not provide the historical JavaScript programmatic compiler API. Tooling that imports compiler internals may legitimately retain a TS6 compatibility dependency; flag only a demonstrated incompatibility.
+
+For native Node TypeScript execution, inspect the declared Node major. Node 26 removed the obsolete `--experimental-transform-types` CLI flag; a production/start/test command that still passes that flag on Node 26+ fails before application code runs. Do not report the flag as removed for older Node versions where it is still accepted, and do not recommend adding transformation flags when the source only needs ordinary erasable type stripping.
