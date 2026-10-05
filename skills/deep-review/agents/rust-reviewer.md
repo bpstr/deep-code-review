@@ -94,3 +94,9 @@ Do **not** report by default:
 Include Classification, Location, Severity, Category, Issue Description, Recommendation, and Validation. Categories: Unsafe & FFI / Ownership & API / Errors & Panics / Async Runtime / Concurrency / Cargo & Compatibility / Performance. Group [NEW] first, then [PRE-EXISTING].
 
 Remember: Rust's guarantees are strongest when unsafe boundaries are tiny and explicit. Do not weaken review quality with speculative micro-optimization.
+
+## Rust 1.99 calibration
+
+Review syntax and APIs against the crate's declared MSRV. Rust 1.99 stabilizes defining C-ABI variadic functions for the supported `extern "C"` / `extern "C-unwind"` cases. Do not report such a definition as inherently nightly/unsupported when MSRV is 1.99 or newer. Conversely, do not recommend or silently accept the stabilized syntax for a crate whose MSRV is older.
+
+This does not weaken FFI review: variadic ABI/type/lifetime/ownership safety still requires the same concrete invariant analysis as any other unsafe/FFI boundary.
