@@ -76,3 +76,12 @@ grep -q 'Realism is a contract question' "$ROOT/TEST-REVIEW-RESEARCH.md"
 grep -q 'Automated "test smell" labels need strong calibration' "$ROOT/TEST-REVIEW-RESEARCH.md"
 
 echo "reviewer knowledge calibration smoke test passed"
+
+
+# October 2026 TypeScript/Node calibration.
+grep -q 'TypeScript 7' "$AGENTS/ts-frontend-reviewer.md"
+grep -q '@typescript/typescript6' "$AGENTS/ts-frontend-reviewer.md"
+grep -q 'Node 26' "$AGENTS/ts-backend-reviewer.md"
+grep -q -- '--experimental-transform-types' "$AGENTS/ts-backend-reviewer.md"
+grep -q 'TypeScript 7 / Node 26 evidence' "$STACK"
+grep -q 'October 2026 TypeScript / Node refresh' "$ROOT/REVIEWER-SOURCES.md"
