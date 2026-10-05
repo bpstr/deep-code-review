@@ -201,3 +201,13 @@ Style-only preferences should be omitted or remain LOW and must survive confiden
 ## Behavioral calibration
 
 Prompt-content smoke tests protect important factual rules, but they are not sufficient. `reviewer-fixtures/` contains small positive and negative examples for opt-in model-based calibration. The fixture harness should be used to measure whether specialists actually find required failures and avoid known false positives before promoting more rules/reviewers into automatic coverage.
+
+## October 2026 React / Playwright refresh
+
+Primary:
+- React 19.3 release: https://react.dev/blog/2026/09/09/react-19-3
+- React ViewTransition reference: https://react.dev/reference/react/ViewTransition
+- React Fragment reference: https://react.dev/reference/react/Fragment
+- Playwright release notes: https://playwright.dev/docs/release-notes
+
+Calibration takeaway: gate React 19.3 Fragment-ref/ViewTransition guidance on the installed React version and rendering/update mode. Gate Playwright removals on the installed Playwright version: `page.accessibility` is removed in 1.57, while `_react`, `_vue`, `:light`, and the `devtools` option are removed in 1.58. A deprecated API in an older pinned project is not the same as an already-removed API.

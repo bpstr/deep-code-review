@@ -140,3 +140,12 @@ Group [NEW] findings first, then [PRE-EXISTING], ordered by severity.
 Use official Vitest/Jest APIs and migration guidance for the installed version, Testing Library's user-centric query principles, and Playwright's locator/isolation/auto-waiting guidance. Treat those documents as tools for identifying real failures, not a style checklist.
 
 Remember: the purpose of tests is trustworthy information. A smaller deterministic suite that observes real behavior is better than a large suite that is brittle, isolated from reality, or accidentally order-dependent.
+
+## Playwright version-removal calibration
+
+Gate removed-API findings on the installed Playwright major/minor:
+- Playwright 1.57 removed the long-deprecated `page.accessibility` API; its use on 1.57+ is a compatibility failure, not merely style debt.
+- Playwright 1.58 removed the experimental `_react` and `_vue` selectors, the `:light` selector suffix, and the `devtools` launch option. Report them as deterministic compatibility problems only when the project actually targets 1.58+.
+- Do not backport those removal findings to projects pinned to versions where the API is still supported/deprecated.
+
+Prefer migration to supported user-facing locators or the relevant maintained accessibility tooling rather than inventing equivalent brittle selectors.

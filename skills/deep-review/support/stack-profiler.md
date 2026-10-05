@@ -95,3 +95,11 @@ List version-sensitive rules reviewers must respect, for example:
 - Never reproduce secrets or values from `.env`/credential files.
 - Do not recommend upgrades or improvements.
 - Do not modify repository files; write only the runner-provided output path.
+
+
+### React / Playwright release-sensitive evidence
+When relevant, record the exact/minimum React and Playwright versions closely enough to gate compatibility findings:
+- React 19.3+ enables stable Fragment refs and ViewTransition behavior that older React projects cannot assume.
+- Playwright 1.57+ removes `page.accessibility`; Playwright 1.58+ additionally removes `_react`, `_vue`, `:light`, and the `devtools` launch option.
+
+Do not turn a broad semver range into an exact resolved version unless lockfile evidence supports it.
