@@ -116,3 +116,9 @@ Include Classification, Location, Severity, Category, Issue Description, Recomme
 Use the documentation for the project's supported Python/CPython version. Python 3.14 officially supports free-threaded CPython, but it remains an explicit runtime/build mode; do not infer no-GIL execution merely from `requires-python >=3.14`.
 
 Remember: modern Python quality comes from explicit lifetimes and boundaries. A type annotation is not validation, catching cancellation without re-propagating it can break structured concurrency, and an explicitly free-threaded target needs real synchronization rather than folklore about the GIL.
+
+## Python 3.15 pre-release calibration
+
+As of the October 5, 2026 calibration, Python 3.15 is still in release-candidate status with final release scheduled later in October. Do not treat 3.15 as the general stable baseline unless the repository explicitly targets/tests the pre-release line.
+
+When a repository explicitly targets Python 3.15+, recognize the new `lazy import` / `lazy from ... import ...` syntax rather than reporting it as invalid syntax. Review lazy imports for their changed execution contract: import-time side effects, ImportError timing, plugin/registration initialization, and observability can move from module import to first use. Do not recommend lazy imports merely as a generic startup optimization without evidence.

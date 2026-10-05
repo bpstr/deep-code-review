@@ -201,3 +201,13 @@ Style-only preferences should be omitted or remain LOW and must survive confiden
 ## Behavioral calibration
 
 Prompt-content smoke tests protect important factual rules, but they are not sufficient. `reviewer-fixtures/` contains small positive and negative examples for opt-in model-based calibration. The fixture harness should be used to measure whether specialists actually find required failures and avoid known false positives before promoting more rules/reviewers into automatic coverage.
+
+## October 2026 Rust / Python refresh
+
+Primary:
+- Rust 1.99 release notes: https://doc.rust-lang.org/stable/releases.html#version-1990-2026-10-01
+- Python 3.15 release schedule: https://peps.python.org/pep-0790/
+- Python 3.15 what's new: https://docs.python.org/3.15/whatsnew/3.15.html
+- Python lazy imports: https://docs.python.org/3.15/reference/simple_stmts.html
+
+Calibration takeaway: Rust 1.99 makes supported C-ABI variadic function definitions stable, but only for crates whose MSRV/toolchain permits them and without relaxing FFI safety analysis. On October 5, 2026 Python 3.15 is still pre-final; only apply 3.15 lazy-import syntax/semantics to repositories that explicitly target it, and review deferred side effects/error timing rather than recommending lazy imports universally.

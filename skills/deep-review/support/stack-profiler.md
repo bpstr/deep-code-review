@@ -95,3 +95,10 @@ List version-sensitive rules reviewers must respect, for example:
 - Never reproduce secrets or values from `.env`/credential files.
 - Do not recommend upgrades or improvements.
 - Do not modify repository files; write only the runner-provided output path.
+
+
+### Rust 1.99 / Python 3.15 evidence
+When relevant, record enough version evidence to gate new syntax:
+- Rust MSRV/toolchain >=1.99 before treating stabilized C-ABI variadic function definitions as supported.
+- Python 3.15 pre-release/final targeting separately from the current stable Python baseline; record explicit CI/pre-release opt-in when present.
+- when Python 3.15 is targeted, note use of lazy-import syntax because import side effects and failure timing become review-relevant.
