@@ -76,3 +76,12 @@ grep -q 'Realism is a contract question' "$ROOT/TEST-REVIEW-RESEARCH.md"
 grep -q 'Automated "test smell" labels need strong calibration' "$ROOT/TEST-REVIEW-RESEARCH.md"
 
 echo "reviewer knowledge calibration smoke test passed"
+
+
+# October 2026 React/Playwright calibration.
+grep -q 'React 19.3 calibration' "$AGENTS/react-reviewer.md"
+grep -q 'Fragment refs' "$AGENTS/react-reviewer.md"
+grep -q 'Playwright 1.57' "$AGENTS/web-testing-reviewer.md"
+grep -q 'Playwright 1.58' "$AGENTS/web-testing-reviewer.md"
+grep -q 'React / Playwright release-sensitive evidence' "$STACK"
+grep -q 'October 2026 React / Playwright refresh' "$ROOT/REVIEWER-SOURCES.md"
