@@ -76,3 +76,12 @@ grep -q 'Realism is a contract question' "$ROOT/TEST-REVIEW-RESEARCH.md"
 grep -q 'Automated "test smell" labels need strong calibration' "$ROOT/TEST-REVIEW-RESEARCH.md"
 
 echo "reviewer knowledge calibration smoke test passed"
+
+
+# October 2026 Rust/Python calibration.
+grep -q 'Rust 1.99 calibration' "$AGENTS/rust-reviewer.md"
+grep -q 'C-ABI variadic' "$AGENTS/rust-reviewer.md"
+grep -q 'Python 3.15 pre-release calibration' "$AGENTS/python-reviewer.md"
+grep -q 'lazy import' "$AGENTS/python-reviewer.md"
+grep -q 'Rust 1.99 / Python 3.15 evidence' "$STACK"
+grep -q 'October 2026 Rust / Python refresh' "$ROOT/REVIEWER-SOURCES.md"
